@@ -1,0 +1,9 @@
+{
+  "name": "jobpilot",
+  "version": "0.1.0",
+  "description": "Conecta Claude Cowork con tu base de datos de búsqueda laboral JobPilot. Accede a ofertas, perfil, tracker y banco de respuestas directamente desde el chat.",
+  "author": {
+    "name": "Matias Pinho"
+  },
+  "keywords": ["jobpilot", "trabajo", "empleo", "mcp"]
+}
