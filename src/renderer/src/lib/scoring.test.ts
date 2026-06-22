@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { scoreOffer, classifyByScore } from './scoring'
-import type { JobOffer } from '../types'
+import type { JobOffer, UserProfile } from '../types'
+
+const TEST_PROFILE: UserProfile = {
+  targetRole: 'Frontend Developer',
+  mainStack: ['React', 'TypeScript', 'Angular'],
+  secondaryStack: ['APIs REST', 'Jest', 'Design System', 'Scrum'],
+  experience: '2+ años',
+  preferredModality: ['Remoto', 'Híbrido'],
+  preferredLocation: ['CABA', 'AMBA', 'Buenos Aires'],
+  avoid: ['Soporte técnico', 'Help Desk', 'Presencial', 'Call center', 'DevOps', 'Infraestructura'],
+  updatedAt: new Date().toISOString()
+}
 
 function makeOffer(partial: Partial<JobOffer>): JobOffer {
   return {
@@ -18,60 +29,67 @@ function makeOffer(partial: Partial<JobOffer>): JobOffer {
 }
 
 describe('scoreOffer', () => {
-  it('score alto para oferta ideal SSR React remota', () => {
+  it('score alto para oferta ideal React remota', () => {
     const offer = makeOffer({
       title: 'Frontend Developer SSR',
-      description: `Buscamos un Frontend Developer SSR. Stack: React, TypeScript, APIs REST.
+      description: `Buscamos un Frontend Developer. Stack: React, TypeScript, APIs REST.
         Modalidad: 100% remoto desde CABA/AMBA. 2+ años de experiencia.
-        Salario en USD. Trabajo en equipo ágil con scrum.
-        Componentes reutilizables y design system.`
+        Trabajo en equipo con Scrum. Design System y componentes reutilizables.`
     })
-    const { score, positives } = scoreOffer(offer)
+    const { score, positives } = scoreOffer(offer, TEST_PROFILE)
     expect(score).toBeGreaterThanOrEqual(70)
     expect(positives).toContain('React')
     expect(positives).toContain('TypeScript')
-    expect(positives).toContain('Remoto')
+    expect(positives).toContain('modalidad')
+    expect(positives).toContain('ubicación')
   })
 
-  it('score bajo para oferta de soporte presencial', () => {
+  it('score bajo para soporte presencial (avoid)', () => {
     const offer = makeOffer({
       title: 'Técnico de soporte help desk',
-      description: 'Soporte técnico presencial en empresa de CABA. Atención de tickets y mesa de ayuda.'
+      description: 'Soporte técnico presencial en empresa de CABA. Atención de tickets.'
     })
-    const { score, negatives } = scoreOffer(offer)
+    const { score, negatives } = scoreOffer(offer, TEST_PROFILE)
     expect(score).toBeLessThan(40)
-    expect(negatives).toContain('Soporte / Help Desk')
+    expect(negatives).toContain('Soporte técnico')
+    expect(negatives).toContain('Presencial')
   })
 
-  it('score bajo para devops sin frontend', () => {
+  it('score bajo para devops (avoid)', () => {
     const offer = makeOffer({
       title: 'DevOps Engineer',
-      description: 'Infraestructura cloud con Kubernetes, Terraform y AWS. Presencial en Buenos Aires.'
+      description: 'Infraestructura cloud con Kubernetes y Terraform. Presencial en Buenos Aires.'
     })
-    const { score } = scoreOffer(offer)
+    const { score, negatives } = scoreOffer(offer, TEST_PROFILE)
     expect(score).toBeLessThan(40)
+    expect(negatives).toContain('DevOps')
   })
 
-  it('penaliza seniority muy alto', () => {
+  it('word-boundary: "react" no matchea dentro de otra palabra', () => {
     const offer = makeOffer({
-      title: 'Senior Frontend Developer 7+ años',
-      description: 'Buscamos frontend con React y 7+ años de experiencia obligatoria.'
+      title: 'Reaction time researcher',
+      description: 'Estudio de tiempos de reaction en laboratorio. Sin tecnología web.'
     })
-    const { negatives } = scoreOffer(offer)
-    expect(negatives).toContain('Seniority muy alto (5+ años)')
+    const { positives } = scoreOffer(offer, TEST_PROFILE)
+    expect(positives).not.toContain('React')
+  })
+
+  it('sin perfil devuelve score neutro', () => {
+    const offer = makeOffer({ title: 'React Developer' })
+    expect(scoreOffer(offer).score).toBe(50)
   })
 
   it('score siempre entre 0 y 100', () => {
     const perfect = makeOffer({
-      title: 'Frontend React TypeScript Angular SSR',
-      description: 'React TypeScript Angular frontend remote remoto híbrido CABA AMBA REST API testing jest scrum design system components salario USD beneficios prepaga git github 2 años SSR semi-senior'
+      title: 'Frontend React TypeScript Angular',
+      description: 'React TypeScript Angular remoto CABA APIs REST Jest Scrum Design System'
     })
     const bad = makeOffer({
       title: 'Soporte help desk',
-      description: 'Soporte presencial infraestructura devops kubernetes terraform sysadmin 7+ años inglés avanzado excluyente'
+      description: 'Soporte técnico presencial Call center DevOps Infraestructura'
     })
-    expect(scoreOffer(perfect).score).toBeLessThanOrEqual(100)
-    expect(scoreOffer(bad).score).toBeGreaterThanOrEqual(0)
+    expect(scoreOffer(perfect, TEST_PROFILE).score).toBeLessThanOrEqual(100)
+    expect(scoreOffer(bad, TEST_PROFILE).score).toBeGreaterThanOrEqual(0)
   })
 })
 

@@ -1,72 +1,44 @@
 import type { JobOffer, JobStatus, UserProfile } from '../types'
 
-interface Rule {
-  label: string
-  points: number
-  test: (text: string) => boolean
-}
-
-const POSITIVE: Rule[] = [
-  { label: 'React', points: 15, test: (t) => /\breact\b/i.test(t) },
-  { label: 'TypeScript', points: 12, test: (t) => /\btypescript\b|\bts\b/i.test(t) },
-  { label: 'Angular', points: 12, test: (t) => /\bangular\b/i.test(t) },
-  { label: 'Frontend', points: 10, test: (t) => /\bfrontend\b|\bfront-end\b|\bfront end\b/i.test(t) },
-  { label: 'Remoto', points: 10, test: (t) => /\bremoto\b|\bremote\b|\bwfh\b|\bwork from home\b/i.test(t) },
-  { label: 'Híbrido', points: 6, test: (t) => /\bh[ií]brido\b|\bhybrid\b/i.test(t) },
-  { label: 'CABA/AMBA', points: 5, test: (t) => /\bcaba\b|\bbuenos aires\b|\bamba\b/i.test(t) },
-  { label: 'APIs REST', points: 4, test: (t) => /\bapi\b|\brest\b|\brestful\b/i.test(t) },
-  { label: 'Testing', points: 4, test: (t) => /\btesting\b|\bjest\b|\bvitest\b|\bcypress\b|\brtl\b|\bunit test/i.test(t) },
-  { label: 'Scrum/Agile', points: 3, test: (t) => /\bscrum\b|\bagile\b|\b[aá]gil\b|\bsprint\b/i.test(t) },
-  { label: 'Componentes/Design System', points: 4, test: (t) => /\bdesign system\b|\bcomponent\b|\bcomponente\b|\bui kit\b/i.test(t) },
-  { label: 'Vue/Next', points: 5, test: (t) => /\bvue\.?js?\b|\bnuxt\b|\bnext\.?js?\b/i.test(t) },
-  { label: 'Salario indicado', points: 3, test: (t) => /\bsalario\b|\bsueldo\b|\bsalary\b|\busd\b|\bars\b|\bcompensac/i.test(t) },
-  { label: 'Beneficios', points: 2, test: (t) => /\bbeneficios\b|\bbenefits\b|\bosde\b|\bprepaga\b/i.test(t) },
-  { label: 'SSR / Semi-Senior', points: 6, test: (t) => /\bssrr?\b|\bsemi.?senior\b|\bintermediate\b|\b2\+?\s*a[ñn]os?\b|\btre[s3]\s*a[ñn]/i.test(t) },
-  { label: 'Git', points: 2, test: (t) => /\bgit\b|\bgithub\b|\bgitlab\b/i.test(t) },
-]
-
-const NEGATIVE: Rule[] = [
-  { label: 'Seniority muy alto (5+ años)', points: -20, test: (t) => /\b[56789]\+?\s*a[ñn]os?\b|\bsenior\s+(?:de\s+)?[56789]\b/i.test(t) },
-  { label: 'Presencial (sin híbrido)', points: -12, test: (t) => /\bpresencial\b/i.test(t) && !/h[ií]brido/i.test(t) },
-  { label: 'Backend dominante', points: -15, test: (t) => /\bbackend\s+developer\b|\bbackend\s+engineer\b|\bfull.?stack.*backend\b/i.test(t) && !/frontend/i.test(t) },
-  { label: 'Soporte / Help Desk', points: -25, test: (t) => /\bsoporte\b|\bhelp.?desk\b|\bmesa\s+de\s+ayuda\b|\bticket\b/i.test(t) },
-  { label: 'Inglés avanzado excluyente', points: -12, test: (t) => /ingl[eé]s\s+avanzado\s+excluyente|advanced\s+english\s+required|english\s+(?:is\s+)?mandatory/i.test(t) },
-  { label: 'Descripción muy pobre', points: -8, test: (t) => t.replace(/\s+/g, '').length < 150 },
-  { label: 'Infraestructura / DevOps', points: -20, test: (t) => /\bdevops\b|\bsysadmin\b|\binfrastructura\b|\bkubernetes\b|\bterraform\b/i.test(t) && !/frontend/i.test(t) },
-]
-
 export interface ScoreBreakdown {
   score: number
   positives: string[]
   negatives: string[]
 }
 
-export function scoreOffer(offer: JobOffer, _profile?: UserProfile): ScoreBreakdown {
-  const text = [offer.title, offer.company, offer.description, ...(offer.requirements ?? [])].join(' ')
+// Busca un término como palabra completa (evita que "react" matchee "reaction").
+// Escapa caracteres especiales para soportar tags como "Node.js" o "C++".
+function hasTerm(text: string, term: string): boolean {
+  const t = term.trim().toLowerCase()
+  if (t.length < 2) return false
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text)
+}
 
-  let score = 30
+// Misma fórmula que el MCP server (mcp/server-http.ts): una oferta debe tener
+// el mismo score sin importar si la agregó Cowork o se importó a mano.
+export function scoreOffer(offer: JobOffer, profile?: UserProfile): ScoreBreakdown {
+  if (!profile) return { score: 50, positives: [], negatives: [] }
+  const text = [offer.title, offer.description, ...(offer.requirements ?? [])].join(' ').toLowerCase()
+
+  let score = 42
   const positives: string[] = []
   const negatives: string[] = []
 
-  for (const rule of POSITIVE) {
-    if (rule.test(text)) {
-      score += rule.points
-      positives.push(rule.label)
-    }
-  }
+  let mainPts = 0
+  for (const tech of profile.mainStack ?? []) if (hasTerm(text, tech)) { mainPts += 8; positives.push(tech) }
+  score += Math.min(mainPts, 30)
 
-  for (const rule of NEGATIVE) {
-    if (rule.test(text)) {
-      score += rule.points
-      negatives.push(rule.label)
-    }
-  }
+  let secPts = 0
+  for (const tech of profile.secondaryStack ?? []) if (hasTerm(text, tech)) { secPts += 3; positives.push(tech) }
+  score += Math.min(secPts, 12)
 
-  return {
-    score: Math.max(0, Math.min(100, Math.round(score))),
-    positives,
-    negatives
-  }
+  if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) { score += 6; positives.push('modalidad') }
+  if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) { score += 6; positives.push('ubicación') }
+
+  for (const bad of profile.avoid ?? []) if (hasTerm(text, bad)) { score -= 18; negatives.push(bad) }
+
+  return { score: Math.max(0, Math.min(100, Math.round(score))), positives, negatives }
 }
 
 export function classifyByScore(
