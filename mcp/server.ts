@@ -88,30 +88,46 @@ function buildApplicationInstructions(): string {
   return `## PLAN\n1. get_profile — datos del usuario y ruta del CV\n2. get_answers_bank — banco de respuestas frecuentes\n3. list_approved_offers — ofertas aprobadas por el usuario\n4. Por cada oferta aprobada:\n   - Abrir link con Claude in Chrome\n   - ¿Pide carta de presentación / cover letter / mensaje al reclutador? SÍ: NO la escribas, llamá a request_cover_letter (company, role, offerId, link), la oferta queda pendiente y la escribe el usuario, pasá a la siguiente. NO: seguí.\n   - Adjuntar CV desde cvPath del perfil\n   - Completar formularios con banco de respuestas\n   - Enviar (solo si no quedó pendiente por carta)\n   - Registrar: mark_offer_applied / register_error (error / pendiente_test / pendiente_manual)\n5. get_tracker_summary — resumen final, incluí cuántas quedaron esperando carta del usuario\n\n## CARTAS DE PRESENTACIÓN\nNO escribís cartas. Las escribe el usuario (tiene una skill dedicada). Cuando una oferta requiera carta, usá request_cover_letter y seguí. Nunca improvises una carta.\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (abrir oferta, completar campo, navegar). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules sin aprobación en JobPilot\n- NUNCA cartas genéricas\n- Cuenta nueva en portal → pendiente_manual\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
 }
 
-// Separa cada tag en términos individuales: ["React TypeScript"] → ["react","typescript"]
-// Tolera perfiles donde el usuario cargó varias tecnologías en un solo tag.
-function tokenize(tags: string[] | undefined): string[] {
-  return (tags ?? [])
-    .flatMap((t) => t.split(/[\s,/|]+/))
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length >= 2)
+// Busca un término como palabra completa (evita que "react" matchee "reaction").
+function hasTerm(text: string, term: string): boolean {
+  const t = term.trim().toLowerCase()
+  if (t.length < 2) return false
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text)
 }
 
-function scoreOffer(offer: RawOffer, profile: Profile | null): number {
-  if (!profile) return 50
+interface ScoreResult {
+  score: number
+  positives: string[]
+  negatives: string[]
+}
+
+// Scoring con topes por categoría para que discrimine (no satura con solo nombrar 4 techs).
+function scoreOffer(offer: RawOffer, profile: Profile | null): ScoreResult {
+  if (!profile) return { score: 50, positives: [], negatives: [] }
   const text = `${offer.title ?? ''} ${offer.description ?? ''} ${(offer.requirements ?? []).join(' ')}`.toLowerCase()
-  let score = 50
-  for (const tech of tokenize(profile.mainStack))         if (text.includes(tech)) score += 8
-  for (const tech of tokenize(profile.secondaryStack))    if (text.includes(tech)) score += 3
-  for (const mod of tokenize(profile.preferredModality))  if (text.includes(mod))  score += 5
-  for (const loc of tokenize(profile.preferredLocation))  if (text.includes(loc))  score += 5
-  // avoid: frase completa (no tokenizar — evita penalizar por palabras sueltas como "años")
-  for (const bad of profile.avoid ?? []) if (text.includes(bad.toLowerCase())) score -= 15
-  return Math.max(0, Math.min(100, score))
+  let score = 42
+  const positives: string[] = []
+  const negatives: string[] = []
+
+  let mainPts = 0
+  for (const tech of profile.mainStack ?? []) if (hasTerm(text, tech)) { mainPts += 8; positives.push(tech) }
+  score += Math.min(mainPts, 30)
+
+  let secPts = 0
+  for (const tech of profile.secondaryStack ?? []) if (hasTerm(text, tech)) { secPts += 3; positives.push(tech) }
+  score += Math.min(secPts, 12)
+
+  if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) { score += 6; positives.push('modalidad') }
+  if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) { score += 6; positives.push('ubicación') }
+
+  for (const bad of profile.avoid ?? []) if (hasTerm(text, bad)) { score -= 18; negatives.push(bad) }
+
+  return { score: Math.max(0, Math.min(100, score)), positives, negatives }
 }
 
 function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unknown> {
-  const score = scoreOffer(raw, profile)
+  const { score, positives, negatives } = scoreOffer(raw, profile)
   const status = score >= 65 ? 'recomendada' : score <= 20 ? 'rechazada' : 'detectada'
   return {
     id: `cowork-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -126,6 +142,7 @@ function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unkn
     salary: raw.salary,
     status,
     score,
+    scoreBreakdown: { positives, negatives },
     detectedAt: new Date().toISOString()
   }
 }

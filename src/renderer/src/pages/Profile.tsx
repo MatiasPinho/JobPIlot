@@ -110,8 +110,12 @@ function TagInput({
   const tagStyle = TAG_STYLES[variant]
 
   const add = () => {
-    const v = input.trim()
-    if (v && !values.includes(v)) onChange([...values, v])
+    // Separa por coma o salto de línea para crear varios tags de una vez
+    const parts = input.split(/[,\n]/).map((p) => p.trim()).filter(Boolean)
+    if (parts.length === 0) { setInput(''); return }
+    const next = [...values]
+    for (const p of parts) if (!next.includes(p)) next.push(p)
+    if (next.length !== values.length) onChange(next)
     setInput('')
   }
 
@@ -150,7 +154,7 @@ function TagInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())}
           onBlur={add}
-          placeholder={placeholder ?? 'Escribí y presioná Enter'}
+          placeholder={placeholder ?? 'Escribí y Enter (o separá con comas)'}
         />
         <button
           onClick={add}
