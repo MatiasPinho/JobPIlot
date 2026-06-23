@@ -149,6 +149,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle('prompts:get', () => readJson(join(DATA_DIR, 'prompts.json'), { searchMessage: null, applicationMessage: null }))
   ipcMain.handle('prompts:save', (_e, prompts: unknown) => writeJson(join(DATA_DIR, 'prompts.json'), prompts))
 
+  // Help requests (Cowork pide intervención humana ante bloqueos)
+  ipcMain.handle('help:get', () => readJson<unknown[]>(join(DATA_DIR, 'help_requests.json'), []))
+  ipcMain.handle('help:resolve', (_e, id: string) => {
+    const file = join(DATA_DIR, 'help_requests.json')
+    const list = readJson<Array<Record<string, unknown>>>(file, [])
+    const next = id
+      ? list.map((h) => (h.id === id ? { ...h, resolved: true } : h))
+      : list.map((h) => ({ ...h, resolved: true }))
+    writeJson(file, next)
+    return { ok: true }
+  })
+
   // ─── Server management ───────────────────────────────────────────────────
 
   ipcMain.handle('server:status', () => ({

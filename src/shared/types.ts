@@ -56,6 +56,9 @@ export interface IElectronAPI {
   getPrompts: () => Promise<CustomPrompts>
   savePrompts: (prompts: CustomPrompts) => Promise<void>
 
+  getHelpRequests: () => Promise<unknown[]>
+  resolveHelpRequest: (id: string) => Promise<{ ok: boolean }>
+
   serverStatus: () => Promise<ServerStatus>
   serverMcpStart: () => Promise<{ ok: boolean }>
   serverMcpStop: () => Promise<{ ok: boolean }>

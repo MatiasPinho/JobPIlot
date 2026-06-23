@@ -123,6 +123,14 @@ function registerIpcHandlers() {
   });
   electron.ipcMain.handle("prompts:get", () => readJson(path.join(DATA_DIR, "prompts.json"), { searchMessage: null, applicationMessage: null }));
   electron.ipcMain.handle("prompts:save", (_e, prompts) => writeJson(path.join(DATA_DIR, "prompts.json"), prompts));
+  electron.ipcMain.handle("help:get", () => readJson(path.join(DATA_DIR, "help_requests.json"), []));
+  electron.ipcMain.handle("help:resolve", (_e, id) => {
+    const file = path.join(DATA_DIR, "help_requests.json");
+    const list = readJson(file, []);
+    const next = id ? list.map((h) => h.id === id ? { ...h, resolved: true } : h) : list.map((h) => ({ ...h, resolved: true }));
+    writeJson(file, next);
+    return { ok: true };
+  });
   electron.ipcMain.handle("server:status", () => ({
     mcpRunning: isRunning(mcpProcess),
     tunnelRunning: isRunning(tunnelProcess),

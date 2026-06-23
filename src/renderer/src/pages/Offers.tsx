@@ -67,6 +67,19 @@ function OfferCard({ offer }: { offer: JobOffer }) {
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {offer.link && (
+            <a
+              href={offer.link}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 text-2xs"
+              style={{ color: col.cream }}
+              title="Abrir oferta en el navegador"
+            >
+              <ExternalLink size={12} />
+            </a>
+          )}
           <ScoreBar score={offer.score} size="sm" />
           {expanded
             ? <ChevronUp size={13} style={{ color: col.fgMuted }} />
@@ -129,6 +142,31 @@ function OfferCard({ offer }: { offer: JobOffer }) {
             </div>
           )}
 
+          {/* Link */}
+          <div>
+            <div className="label">Link de la oferta</div>
+            <div className="flex gap-2">
+              <input
+                className="input"
+                value={offer.link ?? ''}
+                onChange={(e) => updateOffer(offer.id, { link: e.target.value })}
+                placeholder="https://..."
+              />
+              {offer.link && (
+                <a
+                  href={offer.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="btn-secondary flex-shrink-0"
+                  style={{ minHeight: 'auto', padding: '0 0.75rem' }}
+                >
+                  <ExternalLink size={12} /> Abrir
+                </a>
+              )}
+            </div>
+          </div>
+
           {/* Notes */}
           <div>
             <div className="label">Notas</div>
@@ -160,17 +198,6 @@ function OfferCard({ offer }: { offer: JobOffer }) {
                 onClick={() => updateOffer(offer.id, { status: 'recomendada' })}>
                 Desaprobar
               </button>
-            )}
-            {offer.link && (
-              <a
-                href={offer.link}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="btn-mini ml-auto"
-              >
-                <ExternalLink size={11} /> Ver oferta
-              </a>
             )}
             {offer.duplicateOf && (
               <span className="text-2xs flex items-center gap-1 ml-auto" style={{ color: col.fgMuted }}>
@@ -210,8 +237,9 @@ export function Offers() {
         style={{ borderBottom: `1px solid ${alpha(col.border, 0.2)}` }}
       >
         <div>
-          <h1 className="font-bold" style={{ color: col.cream, fontSize: '0.9375rem' }}>Ofertas</h1>
-          <p className="text-2xs" style={{ color: col.fgMuted }}>
+          <p className="label" style={{ marginBottom: '0.2rem' }}>Búsqueda activa</p>
+          <h1 className="page-title" style={{ color: col.fg }}>Ofertas</h1>
+          <p className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>
             {offers.length} total · {metrics.recomendadas} recomendadas · {metrics.aprobadas} aprobadas
           </p>
         </div>

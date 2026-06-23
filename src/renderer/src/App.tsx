@@ -30,17 +30,19 @@ function LoadingScreen() {
 
 export default function App() {
   const [ready, setReady] = useState(false)
-  const loadFromStorage = useStore((s) => s.loadFromStorage)
-  const reloadOffers    = useStore((s) => s.reloadOffers)
+  const loadFromStorage    = useStore((s) => s.loadFromStorage)
+  const reloadOffers       = useStore((s) => s.reloadOffers)
+  const reloadHelpRequests = useStore((s) => s.reloadHelpRequests)
 
   useEffect(() => {
     loadFromStorage().then(() => setReady(true))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Recargar ofertas cuando el MCP server escribe el archivo
+  // Recargar datos cuando el MCP server escribe los archivos
   useEffect(() => {
     window.api.onDataChanged((file) => {
       if (file === 'offers.json') reloadOffers()
+      if (file === 'help_requests.json') reloadHelpRequests()
     })
     return () => window.api.offDataChanged()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

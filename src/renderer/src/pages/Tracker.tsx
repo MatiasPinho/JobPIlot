@@ -33,8 +33,9 @@ export function Tracker() {
         style={{ borderBottom: `1px solid ${alpha(col.border, 0.2)}` }}
       >
         <div>
-          <h1 className="font-bold" style={{ color: col.cream, fontSize: '0.9375rem' }}>Tracker</h1>
-          <p className="text-2xs" style={{ color: col.fgMuted }}>
+          <p className="label" style={{ marginBottom: '0.2rem' }}>Seguimiento</p>
+          <h1 className="page-title" style={{ color: col.fg }}>Tracker</h1>
+          <p className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>
             {tracked.length} postulaciones en seguimiento
           </p>
         </div>

@@ -1,1 +1,7 @@
 node_modules
+
+# Tooling de skills (symlinks con rutas absolutas, no parte del producto)
+.agents/
+.claude/skills/
+skills-lock.json
+AGENTS.md

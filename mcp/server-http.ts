@@ -46,6 +46,16 @@ interface Settings {
   portals?: string[]
 }
 
+// Los portales SIEMPRE salen de Settings, aunque las instrucciones estén editadas.
+// Reemplaza la sección "## PORTALES A BUSCAR" con la lista actual de settings.
+function injectPortals(text: string, settings: Settings | null): string {
+  const portalLine = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
+  if (/## PORTALES A BUSCAR\n/.test(text)) {
+    return text.replace(/(## PORTALES A BUSCAR\n)[\s\S]*?(\n\n)/, `$1${portalLine}$2`)
+  }
+  return `## PORTALES A BUSCAR\n${portalLine}\n\n${text}`
+}
+
 function buildSearchInstructions(profile: Profile | null, settings: Settings | null): string {
   const portals = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
   const avoidList = (profile?.avoid ?? []).length
@@ -75,14 +85,16 @@ ${avoidList}
 ## PLAN DE TAREAS
 1. get_profile — leer el perfil completo del usuario
 2. Verificar que Claude in Chrome está activo y hay sesión en cada portal
-3. Buscar con las keywords del perfil (hasta 4 búsquedas paralelas por portal)
+3. Buscar con las keywords del perfil (máximo 2 búsquedas en paralelo por portal — no más, para no parecer un bot)
 4. Por cada oferta relevante: leer descripción completa → evaluar → add_offer
 5. Al terminar todos los portales: add_offers en bloque si acumulaste varias
 6. STOP — reportar cuántas guardaste y distribución de score, luego esperar aprobación del usuario en JobPilot
 
 ## REGLAS
+- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (búsqueda, navegación, abrir una oferta, scroll). No hagas acciones en ráfaga — el ritmo pausado imita a una persona y reduce que el portal active CAPTCHAs o límites de velocidad.
 - NUNCA postules en esta fase, solo buscás y guardás
-- No reveles información personal fuera del portal`
+- No reveles información personal fuera del portal
+- BLOQUEOS: si encontrás un CAPTCHA, verificación de robot, login con 2FA o cualquier muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá, y esperá a que el usuario lo resuelva y te avise para continuar.`
 }
 
 function buildApplicationInstructions(): string {
@@ -93,22 +105,29 @@ function buildApplicationInstructions(): string {
 4. Por cada oferta aprobada:
    a. Abrir el link con Claude in Chrome
    b. Releer la descripción completa
-   c. Redactar carta personalizada (2-3 párrafos): por qué esta empresa, por qué este rol, un logro concreto relevante
+   c. ¿La postulación pide carta de presentación, cover letter o mensaje al reclutador?
+      - SÍ: NO la escribas. Llamá a request_cover_letter (company, role, offerId, link). La oferta queda pendiente y la escribe el usuario. Pasá a la siguiente oferta.
+      - NO: seguí normalmente.
    d. Adjuntar CV desde la ruta cvPath del perfil
    e. Completar formularios usando el banco de respuestas si aplica
-   f. Enviar la postulación
+   f. Enviar la postulación (solo si no quedaba pendiente por carta)
    g. Registrar resultado:
       - Éxito: mark_offer_applied con descripción del resultado
       - 2 fallos: register_error status "error"
       - Test técnico requerido: register_error status "pendiente_test"
       - Requiere acción manual: register_error status "pendiente_manual"
-5. get_tracker_summary — reportar resumen final al usuario
+5. get_tracker_summary — reportar resumen final, incluyendo cuántas ofertas quedaron esperando carta del usuario
+
+## CARTAS DE PRESENTACIÓN
+NO escribís cartas de presentación. Las escribe el usuario (tiene una skill dedicada para eso). Cuando una oferta requiera carta, usá request_cover_letter y seguí. Nunca improvises una carta vos.
 
 ## REGLAS
+- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (abrir la oferta, completar un campo, navegar). No hagas acciones en ráfaga — el ritmo pausado imita a una persona y reduce que el portal active CAPTCHAs o límites de velocidad.
 - NUNCA postules sin que la oferta esté en estado "aprobada" en JobPilot
 - NUNCA uses cartas genéricas, siempre personalizadas por empresa y rol
 - Si el portal pide crear cuenta nueva, marcá como "pendiente_manual"
-- No reveles información personal fuera del portal`
+- No reveles información personal fuera del portal
+- BLOQUEOS: si encontrás un CAPTCHA, verificación de robot, login con 2FA o cualquier muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá, y esperá a que el usuario lo resuelva y te avise para continuar.`
 }
 
 // Separa cada tag en términos individuales: ["React TypeScript"] → ["react","typescript"]
@@ -222,6 +241,33 @@ const TOOLS = [
         notes: { type: 'string', description: 'Descripción del problema' }
       },
       required: ['id', 'status']
+    }
+  },
+  {
+    name: 'request_human_help',
+    description: 'Pedí intervención humana cuando un bloqueo te impide continuar: CAPTCHA, verificación de robot, login con 2FA, muro de inicio de sesión, o cualquier paso que requiera un humano. NUNCA intentes resolver un CAPTCHA o verificación vos mismo. Llamá esto, pausá, y esperá a que el usuario resuelva y te avise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        reason:  { type: 'string', description: 'Qué bloqueo encontraste (ej: "CAPTCHA en Indeed al buscar", "Login con 2FA en LinkedIn")' },
+        portal:  { type: 'string', description: 'Portal donde ocurrió (opcional)' },
+        url:     { type: 'string', description: 'URL de la página bloqueada para que el usuario la abra (opcional)' }
+      },
+      required: ['reason']
+    }
+  },
+  {
+    name: 'request_cover_letter',
+    description: 'Usá esto cuando una postulación requiera carta de presentación / cover letter / mensaje al reclutador. NO escribas la carta vos. Registrá el pedido para que el usuario la escriba, dejá esa oferta pendiente y seguí con las demás.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Nombre de la empresa' },
+        role:    { type: 'string', description: 'Título del puesto' },
+        offerId: { type: 'string', description: 'ID de la oferta en JobPilot (si la tenés)' },
+        link:    { type: 'string', description: 'URL de la oferta (opcional)' }
+      },
+      required: ['company', 'role']
     }
   },
   {
@@ -372,6 +418,60 @@ function createMcpServer() {
           return { content: [{ type: 'text', text: `Oferta "${offers[idx].title}" marcada como ${a.status}.` }] }
         }
 
+        case 'request_human_help': {
+          const a = args as { reason: string; portal?: string; url?: string }
+          const file = join(DATA_DIR, 'help_requests.json')
+          const list = readJson<Array<Record<string, unknown>>>(file, [])
+          list.push({
+            id: `help-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            reason: a.reason,
+            portal: a.portal,
+            url: a.url,
+            createdAt: new Date().toISOString(),
+            resolved: false
+          })
+          writeJson(file, list)
+          return {
+            content: [{
+              type: 'text',
+              text: `Pedido de ayuda registrado en JobPilot: "${a.reason}". PAUSÁ acá. El usuario tiene que resolver el bloqueo manualmente (no intentes resolverlo vos). Esperá a que te avise que ya está resuelto para continuar.`
+            }]
+          }
+        }
+
+        case 'request_cover_letter': {
+          const a = args as { company: string; role: string; offerId?: string; link?: string }
+          const file = join(DATA_DIR, 'help_requests.json')
+          const list = readJson<Array<Record<string, unknown>>>(file, [])
+          list.push({
+            id: `cover-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type: 'cover_letter',
+            reason: `Carta de presentación: ${a.role} en ${a.company}`,
+            company: a.company,
+            role: a.role,
+            offerId: a.offerId,
+            url: a.link,
+            createdAt: new Date().toISOString(),
+            resolved: false
+          })
+          writeJson(file, list)
+          // dejar la oferta pendiente para que no se postule sin carta
+          if (a.offerId) {
+            const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
+            const idx = offers.findIndex((o) => o.id === a.offerId)
+            if (idx !== -1) {
+              offers[idx] = { ...offers[idx], status: 'pendiente_manual', notes: 'Esperando carta de presentación del usuario' }
+              writeJson(join(DATA_DIR, 'offers.json'), offers)
+            }
+          }
+          return {
+            content: [{
+              type: 'text',
+              text: `Esta oferta (${a.role} en ${a.company}) requiere carta de presentación. NO la escribas. La dejé pendiente en JobPilot para que el usuario la escriba. Seguí con las otras ofertas aprobadas; cuando el usuario te pase la carta, volvés a esta.`
+            }]
+          }
+        }
+
         case 'get_tracker_summary': {
           const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
           const counts: Record<string, number> = {}
@@ -394,10 +494,13 @@ function createMcpServer() {
           const prompts  = readJson<{ searchInstructions?: string; applicationInstructions?: string }>(join(DATA_DIR, 'prompts.json'), {})
           let text: string
           if (mode === 'busqueda') {
-            text = prompts.searchInstructions ?? buildSearchInstructions(
+            const settings = readJson<Settings | null>(join(DATA_DIR, 'settings.json'), null)
+            const base = prompts.searchInstructions ?? buildSearchInstructions(
               readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null),
-              readJson<Settings | null>(join(DATA_DIR, 'settings.json'), null)
+              settings
             )
+            // Forzar que los portales salgan de Settings, no del texto guardado
+            text = injectPortals(base, settings)
           } else {
             text = prompts.applicationInstructions ?? buildApplicationInstructions()
           }

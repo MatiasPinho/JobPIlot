@@ -67,16 +67,25 @@ interface Settings {
   portals?: string[]
 }
 
+// Los portales SIEMPRE salen de Settings, aunque las instrucciones estén editadas.
+function injectPortals(text: string, settings: Settings | null): string {
+  const portalLine = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
+  if (/## PORTALES A BUSCAR\n/.test(text)) {
+    return text.replace(/(## PORTALES A BUSCAR\n)[\s\S]*?(\n\n)/, `$1${portalLine}$2`)
+  }
+  return `## PORTALES A BUSCAR\n${portalLine}\n\n${text}`
+}
+
 function buildSearchInstructions(profile: Profile | null, settings: Settings | null): string {
   const portals = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
   const avoidList = (profile?.avoid ?? []).length
     ? (profile!.avoid!).map((a) => `- ${a}`).join('\n')
     : '- (ninguno configurado)'
-  return `## PORTALES A BUSCAR\n${portals}\n\n## CRITERIOS DE FILTRO\nPriorizá ofertas que cumplan al menos 3 de:\n- Empresa con buena reputación (4+ estrellas)\n- Salario igual o mayor a la pretensión del perfil\n- Modalidad que coincida con las preferencias del perfil\n- Ubicación dentro de la zona indicada en el perfil o remoto\n- Beneficios mencionados\n\nDESCARTÁ siempre:\n- MLM, ventas a comisión pura sin sueldo base\n- Inversión inicial\n- Reviews negativos visibles\n- Inglés superior a B1\n- SENIOR (5+ años obligatorio)\n- Exclusiones del perfil:\n${avoidList}\n\n## PLAN\n1. get_profile\n2. Verificar Claude in Chrome y sesión en portal\n3. Buscar con keywords del perfil (hasta 4 en paralelo)\n4. add_offer por cada oferta relevante (o add_offers en bloque al final)\n5. STOP — reportar cuántas guardaste, esperar aprobación del usuario en JobPilot\n\n## REGLAS\n- NUNCA postules en esta fase\n- No reveles info personal fuera del portal`
+  return `## PORTALES A BUSCAR\n${portals}\n\n## CRITERIOS DE FILTRO\nPriorizá ofertas que cumplan al menos 3 de:\n- Empresa con buena reputación (4+ estrellas)\n- Salario igual o mayor a la pretensión del perfil\n- Modalidad que coincida con las preferencias del perfil\n- Ubicación dentro de la zona indicada en el perfil o remoto\n- Beneficios mencionados\n\nDESCARTÁ siempre:\n- MLM, ventas a comisión pura sin sueldo base\n- Inversión inicial\n- Reviews negativos visibles\n- Inglés superior a B1\n- SENIOR (5+ años obligatorio)\n- Exclusiones del perfil:\n${avoidList}\n\n## PLAN\n1. get_profile\n2. Verificar Claude in Chrome y sesión en portal\n3. Buscar con keywords del perfil (máximo 2 en paralelo, no más)\n4. add_offer por cada oferta relevante (o add_offers en bloque al final)\n5. STOP — reportar cuántas guardaste, esperar aprobación del usuario en JobPilot\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (búsqueda, navegación, abrir oferta). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules en esta fase\n- No reveles info personal fuera del portal\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
 }
 
 function buildApplicationInstructions(): string {
-  return `## PLAN\n1. get_profile — datos del usuario y ruta del CV\n2. get_answers_bank — banco de respuestas frecuentes\n3. list_approved_offers — ofertas aprobadas por el usuario\n4. Por cada oferta aprobada:\n   - Abrir link con Claude in Chrome\n   - Carta personalizada (por qué empresa, por qué rol, logro concreto)\n   - Adjuntar CV desde cvPath del perfil\n   - Completar formularios con banco de respuestas\n   - Registrar: mark_offer_applied / register_error (error / pendiente_test / pendiente_manual)\n5. get_tracker_summary — resumen final\n\n## REGLAS\n- NUNCA postules sin aprobación en JobPilot\n- NUNCA cartas genéricas\n- Cuenta nueva en portal → pendiente_manual`
+  return `## PLAN\n1. get_profile — datos del usuario y ruta del CV\n2. get_answers_bank — banco de respuestas frecuentes\n3. list_approved_offers — ofertas aprobadas por el usuario\n4. Por cada oferta aprobada:\n   - Abrir link con Claude in Chrome\n   - ¿Pide carta de presentación / cover letter / mensaje al reclutador? SÍ: NO la escribas, llamá a request_cover_letter (company, role, offerId, link), la oferta queda pendiente y la escribe el usuario, pasá a la siguiente. NO: seguí.\n   - Adjuntar CV desde cvPath del perfil\n   - Completar formularios con banco de respuestas\n   - Enviar (solo si no quedó pendiente por carta)\n   - Registrar: mark_offer_applied / register_error (error / pendiente_test / pendiente_manual)\n5. get_tracker_summary — resumen final, incluí cuántas quedaron esperando carta del usuario\n\n## CARTAS DE PRESENTACIÓN\nNO escribís cartas. Las escribe el usuario (tiene una skill dedicada). Cuando una oferta requiera carta, usá request_cover_letter y seguí. Nunca improvises una carta.\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (abrir oferta, completar campo, navegar). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules sin aprobación en JobPilot\n- NUNCA cartas genéricas\n- Cuenta nueva en portal → pendiente_manual\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
 }
 
 // Separa cada tag en términos individuales: ["React TypeScript"] → ["react","typescript"]
@@ -174,6 +183,33 @@ const TOOLS = [
         notes: { type: 'string', description: 'Descripción del problema' }
       },
       required: ['id', 'status']
+    }
+  },
+  {
+    name: 'request_human_help',
+    description: 'Pedí intervención humana cuando un bloqueo te impide continuar: CAPTCHA, verificación de robot, login con 2FA, muro de inicio de sesión, o cualquier paso que requiera un humano. NUNCA intentes resolver un CAPTCHA o verificación vos mismo. Llamá esto, pausá, y esperá a que el usuario resuelva y te avise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        reason:  { type: 'string', description: 'Qué bloqueo encontraste' },
+        portal:  { type: 'string', description: 'Portal donde ocurrió (opcional)' },
+        url:     { type: 'string', description: 'URL de la página bloqueada (opcional)' }
+      },
+      required: ['reason']
+    }
+  },
+  {
+    name: 'request_cover_letter',
+    description: 'Usá esto cuando una postulación requiera carta de presentación / cover letter. NO escribas la carta vos. Registrá el pedido para que el usuario la escriba, dejá la oferta pendiente y seguí con las demás.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        company: { type: 'string', description: 'Nombre de la empresa' },
+        role:    { type: 'string', description: 'Título del puesto' },
+        offerId: { type: 'string', description: 'ID de la oferta (si la tenés)' },
+        link:    { type: 'string', description: 'URL de la oferta (opcional)' }
+      },
+      required: ['company', 'role']
     }
   },
   {
@@ -319,6 +355,59 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return { content: [{ type: 'text', text: `Oferta "${offers[idx].title}" marcada como ${a.status}.` }] }
       }
 
+      case 'request_human_help': {
+        const a = args as { reason: string; portal?: string; url?: string }
+        const file = join(DATA_DIR, 'help_requests.json')
+        const list = readJson<Array<Record<string, unknown>>>(file, [])
+        list.push({
+          id: `help-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          reason: a.reason,
+          portal: a.portal,
+          url: a.url,
+          createdAt: new Date().toISOString(),
+          resolved: false
+        })
+        writeJson(file, list)
+        return {
+          content: [{
+            type: 'text',
+            text: `Pedido de ayuda registrado en JobPilot: "${a.reason}". PAUSÁ acá. El usuario tiene que resolver el bloqueo manualmente. Esperá a que te avise que ya está resuelto para continuar.`
+          }]
+        }
+      }
+
+      case 'request_cover_letter': {
+        const a = args as { company: string; role: string; offerId?: string; link?: string }
+        const file = join(DATA_DIR, 'help_requests.json')
+        const list = readJson<Array<Record<string, unknown>>>(file, [])
+        list.push({
+          id: `cover-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'cover_letter',
+          reason: `Carta de presentación: ${a.role} en ${a.company}`,
+          company: a.company,
+          role: a.role,
+          offerId: a.offerId,
+          url: a.link,
+          createdAt: new Date().toISOString(),
+          resolved: false
+        })
+        writeJson(file, list)
+        if (a.offerId) {
+          const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
+          const idx = offers.findIndex((o) => o.id === a.offerId)
+          if (idx !== -1) {
+            offers[idx] = { ...offers[idx], status: 'pendiente_manual', notes: 'Esperando carta de presentación del usuario' }
+            writeJson(join(DATA_DIR, 'offers.json'), offers)
+          }
+        }
+        return {
+          content: [{
+            type: 'text',
+            text: `Esta oferta (${a.role} en ${a.company}) requiere carta de presentación. NO la escribas. La dejé pendiente para que la escriba el usuario. Seguí con las otras ofertas.`
+          }]
+        }
+      }
+
       case 'get_tracker_summary': {
         const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
         const counts: Record<string, number> = {}
@@ -341,10 +430,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const prompts  = readJson<{ searchInstructions?: string; applicationInstructions?: string }>(join(DATA_DIR, 'prompts.json'), {})
         let text: string
         if (mode === 'busqueda') {
-          text = prompts.searchInstructions ?? buildSearchInstructions(
+          const settings = readJson<Settings | null>(join(DATA_DIR, 'settings.json'), null)
+          const base = prompts.searchInstructions ?? buildSearchInstructions(
             readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null),
-            readJson<Settings | null>(join(DATA_DIR, 'settings.json'), null)
+            settings
           )
+          text = injectPortals(base, settings)
         } else {
           text = prompts.applicationInstructions ?? buildApplicationInstructions()
         }

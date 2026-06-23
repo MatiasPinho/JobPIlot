@@ -6,7 +6,8 @@ import type {
   JobStatus,
   AppSettings,
   View,
-  DashboardMetrics
+  DashboardMetrics,
+  HelpRequest
 } from '../types'
 import { scoreOffer, classifyByScore } from '../lib/scoring'
 import { detectDuplicates } from '../lib/deduplication'
@@ -29,6 +30,7 @@ interface AppState {
   activeView: View
   loading: boolean
   notification: Notification | null
+  helpRequests: HelpRequest[]
 
   // Data setters (persist via IPC)
   setProfile: (profile: UserProfile) => Promise<void>
@@ -55,6 +57,10 @@ interface AppState {
   getDashboardMetrics: () => DashboardMetrics
   getApprovedOffers: () => JobOffer[]
 
+  // Help requests
+  reloadHelpRequests: () => Promise<void>
+  resolveHelpRequest: (id: string) => Promise<void>
+
   // Bootstrap
   loadFromStorage: () => Promise<void>
   reloadOffers: () => Promise<void>
@@ -79,6 +85,7 @@ export const useStore = create<AppState>((set, get) => ({
   activeView: 'dashboard',
   loading: false,
   notification: null,
+  helpRequests: [],
 
   setProfile: async (profile) => {
     set({ profile })
@@ -223,11 +230,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadFromStorage: async () => {
     try {
-      const [profile, offers, answers, settings] = await Promise.all([
+      const [profile, offers, answers, settings, helpRequests] = await Promise.all([
         window.api.getProfile(),
         window.api.getOffers(),
         window.api.getAnswers(),
-        window.api.getSettings()
+        window.api.getSettings(),
+        window.api.getHelpRequests()
       ])
 
       const defaultFolder = await window.api.getDefaultWorkFolder()
@@ -236,7 +244,8 @@ export const useStore = create<AppState>((set, get) => ({
         profile: profile ?? DEFAULT_PROFILE,
         offers: offers ?? [],
         answers: answers ?? [],
-        settings: { ...(settings ?? DEFAULT_SETTINGS), workFolder: settings?.workFolder || defaultFolder }
+        settings: { ...(settings ?? DEFAULT_SETTINGS), workFolder: settings?.workFolder || defaultFolder },
+        helpRequests: helpRequests ?? []
       })
     } catch (err) {
       console.error('Error loading from storage:', err)
@@ -251,5 +260,19 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (err) {
       console.error('Error reloading offers:', err)
     }
+  },
+
+  reloadHelpRequests: async () => {
+    try {
+      const list = await window.api.getHelpRequests()
+      set({ helpRequests: list ?? [] })
+    } catch (err) {
+      console.error('Error reloading help requests:', err)
+    }
+  },
+
+  resolveHelpRequest: async (id) => {
+    await window.api.resolveHelpRequest(id)
+    set((s) => ({ helpRequests: s.helpRequests.map((h) => (h.id === id ? { ...h, resolved: true } : h)) }))
   }
 }))

@@ -1,4 +1,4 @@
-import { Briefcase, CheckCircle2, Star, Send, Clock, AlertCircle, Copy, TrendingUp } from 'lucide-react'
+import { Clock, AlertCircle, TrendingUp, ArrowRight } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { ScoreBar } from '../components/ui/ScoreBar'
@@ -18,7 +18,7 @@ function MetricCard({ label, value, icon: Icon, accent, sub }: MetricCardProps) 
     <div className="card flex items-start justify-between gap-2 reveal-up">
       <div className="min-w-0">
         <div className="label">{label}</div>
-        <div className="text-xl font-bold mt-0.5" style={{ color: c }}>{value}</div>
+        <div className="text-xl font-bold mt-0.5 tabular-nums" style={{ color: c }}>{value}</div>
         {sub && <div className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>{sub}</div>}
       </div>
       <div
@@ -27,6 +27,37 @@ function MetricCard({ label, value, icon: Icon, accent, sub }: MetricCardProps) 
       >
         <Icon size={15} style={{ color: c }} strokeWidth={1.75} />
       </div>
+    </div>
+  )
+}
+
+function PipelineBar() {
+  const metrics = useStore((s) => s.getDashboardMetrics())
+
+  const stages = [
+    { label: 'Detectadas',   count: metrics.total,        color: col.fgDim  },
+    { label: 'Recomendadas', count: metrics.recomendadas, color: col.cream  },
+    { label: 'Aprobadas',    count: metrics.aprobadas,    color: col.green  },
+    { label: 'Postuladas',   count: metrics.postuladas,   color: col.violet },
+  ]
+
+  return (
+    <div className="pipeline-bar reveal-up">
+      {stages.map((stage, i) => (
+        <div key={stage.label} className="pipeline-stage">
+          {i > 0 && (
+            <ArrowRight
+              size={11}
+              className="absolute"
+              style={{ left: -7, top: '50%', transform: 'translateY(-50%)', color: col.dim, zIndex: 1 }}
+            />
+          )}
+          <div className="pipeline-num" style={{ color: stage.color }}>
+            {stage.count}
+          </div>
+          <div className="label" style={{ marginBottom: 0 }}>{stage.label}</div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -43,24 +74,25 @@ export function Dashboard() {
   return (
     <div className="p-5 flex flex-col gap-5">
       {/* Header */}
-      <div>
-        <h1 className="font-bold" style={{ color: col.cream, fontSize: '0.9375rem' }}>Dashboard</h1>
-        <p className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>Resumen de tu búsqueda laboral</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="label" style={{ marginBottom: '0.2rem' }}>Resumen</p>
+          <h1 className="page-title" style={{ color: col.fg }}>Dashboard</h1>
+        </div>
+        {metrics.recomendadas > 0 && (
+          <button className="btn-primary reveal-up" onClick={() => setActiveView('offers')}>
+            Revisar {metrics.recomendadas} recomendadas
+          </button>
+        )}
       </div>
 
-      {/* Metrics row 1 */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <MetricCard label="Total ofertas"  value={metrics.total}        icon={Briefcase}   />
-        <MetricCard label="Recomendadas"   value={metrics.recomendadas} icon={Star}         accent={col.cream} />
-        <MetricCard label="Aprobadas"      value={metrics.aprobadas}    icon={CheckCircle2} accent={col.green} />
-        <MetricCard label="Postuladas"     value={metrics.postuladas}   icon={Send}         accent={col.violet} />
-      </div>
+      {/* Pipeline — the funnel at a glance */}
+      <PipelineBar />
 
-      {/* Metrics row 2 */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <MetricCard label="Pendientes"     value={metrics.pendientes}   icon={Clock}        accent={col.amber} />
-        <MetricCard label="Errores"        value={metrics.errores}      icon={AlertCircle}  accent={col.red} />
-        <MetricCard label="Duplicadas"     value={metrics.duplicadas}   icon={Copy}         accent={col.fgMuted} />
+      {/* Secondary metrics */}
+      <div className="grid grid-cols-3 gap-3">
+        <MetricCard label="Pendientes"    value={metrics.pendientes}  icon={Clock}       accent={col.amber} />
+        <MetricCard label="Errores"       value={metrics.errores}     icon={AlertCircle} accent={col.red}   />
         <MetricCard
           label="Score promedio"
           value={metrics.avgScore > 0 ? `${Math.round(metrics.avgScore)}` : '—'}
@@ -70,8 +102,8 @@ export function Dashboard() {
         />
       </div>
 
+      {/* Quick actions + recent */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* Quick actions */}
         <div className="card">
           <div className="section-label">Acciones rápidas</div>
           <div className="flex flex-col gap-2">
@@ -95,17 +127,18 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Recent offers */}
         <div className="card">
           <div className="section-label">Últimas detectadas</div>
           {recent.length === 0 ? (
-            <p className="text-2xs text-center py-4" style={{ color: col.fgMuted }}>
-              No hay ofertas aún. Usá Cowork Bridge para importar.
-            </p>
+            <div className="text-center py-6">
+              <p className="text-2xs" style={{ color: col.fgMuted }}>
+                No hay ofertas aún. Usá Cowork Bridge para importar.
+              </p>
+            </div>
           ) : (
             <div className="flex flex-col gap-2">
               {recent.map((o) => (
-                <div key={o.id} className="flex items-center gap-2.5 py-1">
+                <div key={o.id} className="flex items-center gap-2.5 py-0.5">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs truncate font-medium" style={{ color: col.fg }}>{o.title}</div>
                     <div className="text-2xs truncate" style={{ color: col.fgMuted }}>

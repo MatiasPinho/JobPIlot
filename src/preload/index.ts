@@ -22,6 +22,9 @@ const api: IElectronAPI = {
   getPrompts: () => ipcRenderer.invoke('prompts:get'),
   savePrompts: (prompts) => ipcRenderer.invoke('prompts:save', prompts),
 
+  getHelpRequests: () => ipcRenderer.invoke('help:get'),
+  resolveHelpRequest: (id) => ipcRenderer.invoke('help:resolve', id),
+
   serverStatus: () => ipcRenderer.invoke('server:status'),
   serverMcpStart: () => ipcRenderer.invoke('server:mcp:start'),
   serverMcpStop: () => ipcRenderer.invoke('server:mcp:stop'),

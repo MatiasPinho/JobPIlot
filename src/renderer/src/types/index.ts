@@ -28,6 +28,7 @@ export interface UserProfile {
   preferredLocation: string[]
   avoid: string[]
   cvPath?: string
+  cvText?: string
   updatedAt: string
 }
 
@@ -83,6 +84,19 @@ export interface DashboardMetrics {
 
 // ---- IPC API (contextBridge) ----
 
+export interface HelpRequest {
+  id: string
+  type?: 'block' | 'cover_letter'
+  reason: string
+  portal?: string
+  company?: string
+  role?: string
+  offerId?: string
+  url?: string
+  createdAt: string
+  resolved: boolean
+}
+
 export interface ElectronAPI {
   getProfile: () => Promise<UserProfile | null>
   saveProfile: (profile: UserProfile) => Promise<void>
@@ -103,6 +117,9 @@ export interface ElectronAPI {
 
   getPrompts: () => Promise<{ searchInstructions: string | null; applicationInstructions: string | null; searchMessage: string | null; applicationMessage: string | null }>
   savePrompts: (p: { searchInstructions: string | null; applicationInstructions: string | null; searchMessage: string | null; applicationMessage: string | null }) => Promise<void>
+
+  getHelpRequests: () => Promise<HelpRequest[]>
+  resolveHelpRequest: (id: string) => Promise<{ ok: boolean }>
 
   serverStatus: () => Promise<{ mcpRunning: boolean; tunnelRunning: boolean; tunnelUrl: string | null }>
   serverMcpStart: () => Promise<{ ok: boolean }>

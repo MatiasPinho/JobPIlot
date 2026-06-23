@@ -12,6 +12,7 @@ export interface SharedProfile {
   preferredLocation: string[]
   avoid: string[]
   cvPath?: string
+  cvText?: string
   updatedAt: string
 }
 

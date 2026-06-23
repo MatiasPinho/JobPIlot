@@ -78,7 +78,7 @@ export function Sidebar() {
               onClick={() => setActiveView(view)}
               className="nav-item"
               style={active
-                ? { background: alpha(col.cream, 0.12), color: col.cream }
+                ? { background: alpha(col.cream, 0.09), color: col.cream, boxShadow: `inset 3px 0 0 ${alpha(col.cream, 0.75)}` }
                 : undefined
               }
             >
@@ -106,23 +106,20 @@ export function Sidebar() {
 
       {/* Stats footer */}
       <div
-        className="px-4 py-3 flex flex-col gap-1.5"
+        className="px-3 py-3 flex flex-col gap-1"
         style={{ borderTop: `1px solid ${alpha(col.border, 0.18)}` }}
       >
-        <div className="flex justify-between items-center">
-          <span className="text-2xs" style={{ color: col.fgMuted }}>Postuladas</span>
-          <span className="text-2xs font-semibold" style={{ color: col.violet }}>{metrics.postuladas}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-2xs" style={{ color: col.fgMuted }}>Pendientes</span>
-          <span className="text-2xs font-semibold" style={{ color: col.amber }}>{metrics.pendientes}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-2xs" style={{ color: col.fgMuted }}>Score prom.</span>
-          <span className="text-2xs font-semibold" style={{ color: col.cream }}>
-            {metrics.avgScore > 0 ? `${metrics.avgScore}` : '—'}
-          </span>
-        </div>
+        {[
+          { label: 'Postuladas', value: metrics.postuladas, color: col.violet },
+          { label: 'Pendientes', value: metrics.pendientes, color: col.amber },
+          { label: 'Score prom.', value: metrics.avgScore > 0 ? metrics.avgScore : '—', color: col.cream },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="flex items-center gap-2">
+            <div className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: color, opacity: 0.7 }} />
+            <span className="text-2xs flex-1" style={{ color: col.fgMuted }}>{label}</span>
+            <span className="text-2xs font-semibold tabular-nums" style={{ color }}>{value}</span>
+          </div>
+        ))}
       </div>
     </aside>
   )
