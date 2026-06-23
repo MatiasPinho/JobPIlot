@@ -4,9 +4,14 @@ import { homedir } from 'os'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, watch } from 'fs'
 import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
-// pdf-parse is CJS-only; require avoids ESM interop issues
+// pdf-parse v2 exposes a PDFParse class (v1 exposed a callable function).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
+const { PDFParse } = require('pdf-parse') as {
+  PDFParse: new (options: { data: Buffer }) => {
+    getText: () => Promise<{ text: string }>
+    destroy: () => Promise<void> | void
+  }
+}
 import type {
   SharedProfile,
   SharedAnswer,
@@ -79,6 +84,20 @@ function writeJson(file: string, data: unknown): void {
   writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8')
 }
 
+async function readPdfText(filePath: string): Promise<{ text: string; filename: string }> {
+  const buffer = readFileSync(filePath)
+  const parser = new PDFParse({ data: buffer })
+  try {
+    const data = await parser.getText()
+    return {
+      text: data.text,
+      filename: filePath.split(/[/\\]/).pop() ?? 'archivo.pdf'
+    }
+  } finally {
+    await parser.destroy()
+  }
+}
+
 // ─── IPC Handlers ────────────────────────────────────────────────────────────
 
 function registerIpcHandlers(): void {
@@ -124,10 +143,8 @@ function registerIpcHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return { success: false, error: 'Cancelado' }
     const filePath = result.filePaths[0]
     try {
-      const buffer = readFileSync(filePath)
-      const data = await pdfParse(buffer)
-      const filename = filePath.split(/[/\\]/).pop() ?? 'archivo.pdf'
-      return { success: true, text: data.text, filename }
+      const data = await readPdfText(filePath)
+      return { success: true, text: data.text, filename: data.filename }
     } catch (err) {
       return { success: false, error: `Error leyendo PDF: ${String(err)}` }
     }
@@ -136,10 +153,8 @@ function registerIpcHandlers(): void {
   // Read PDF from a file path (drag & drop sends the path from renderer)
   ipcMain.handle('pdf:read-path', async (_e, filePath: string) => {
     try {
-      const buffer = readFileSync(filePath)
-      const data = await pdfParse(buffer)
-      const filename = filePath.split(/[/\\]/).pop() ?? 'archivo.pdf'
-      return { success: true, text: data.text, filename }
+      const data = await readPdfText(filePath)
+      return { success: true, text: data.text, filename: data.filename }
     } catch (err) {
       return { success: false, error: `Error leyendo PDF: ${String(err)}` }
     }
@@ -158,6 +173,30 @@ function registerIpcHandlers(): void {
       ? list.map((h) => (h.id === id ? { ...h, resolved: true } : h))
       : list.map((h) => ({ ...h, resolved: true }))
     writeJson(file, next)
+    return { ok: true }
+  })
+
+  // Backup portátil: un JSON con todo. ponytail: help_requests es transitorio, no se exporta.
+  const BACKUP_FILES = ['profile', 'offers', 'answers', 'settings', 'prompts'] as const
+  ipcMain.handle('data:export', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const res = await dialog.showSaveDialog(win!, {
+      defaultPath: `jobpilot-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (res.canceled || !res.filePath) return { ok: false }
+    const bundle: Record<string, unknown> = { _jobpilot: 1, exportedAt: new Date().toISOString() }
+    for (const f of BACKUP_FILES) bundle[f] = readJson(join(DATA_DIR, `${f}.json`), null)
+    writeJson(res.filePath, bundle)
+    return { ok: true, path: res.filePath }
+  })
+  ipcMain.handle('data:import', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const res = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+    if (res.canceled || !res.filePaths[0]) return { ok: false }
+    const bundle = readJson<Record<string, unknown> | null>(res.filePaths[0], null)
+    if (!bundle || bundle._jobpilot !== 1) return { ok: false, error: 'No es un backup de JobPilot.' }
+    for (const f of BACKUP_FILES) if (bundle[f] != null) writeJson(join(DATA_DIR, `${f}.json`), bundle[f])
     return { ok: true }
   })
 

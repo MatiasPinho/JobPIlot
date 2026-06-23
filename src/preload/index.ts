@@ -25,6 +25,9 @@ const api: IElectronAPI = {
   getHelpRequests: () => ipcRenderer.invoke('help:get'),
   resolveHelpRequest: (id) => ipcRenderer.invoke('help:resolve', id),
 
+  exportData: () => ipcRenderer.invoke('data:export'),
+  importData: () => ipcRenderer.invoke('data:import'),
+
   serverStatus: () => ipcRenderer.invoke('server:status'),
   serverMcpStart: () => ipcRenderer.invoke('server:mcp:start'),
   serverMcpStop: () => ipcRenderer.invoke('server:mcp:stop'),

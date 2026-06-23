@@ -59,6 +59,9 @@ export interface IElectronAPI {
   getHelpRequests: () => Promise<unknown[]>
   resolveHelpRequest: (id: string) => Promise<{ ok: boolean }>
 
+  exportData: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  importData: () => Promise<{ ok: boolean; error?: string }>
+
   serverStatus: () => Promise<ServerStatus>
   serverMcpStart: () => Promise<{ ok: boolean }>
   serverMcpStop: () => Promise<{ ok: boolean }>

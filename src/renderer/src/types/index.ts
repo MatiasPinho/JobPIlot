@@ -121,6 +121,9 @@ export interface ElectronAPI {
   getHelpRequests: () => Promise<HelpRequest[]>
   resolveHelpRequest: (id: string) => Promise<{ ok: boolean }>
 
+  exportData: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  importData: () => Promise<{ ok: boolean; error?: string }>
+
   serverStatus: () => Promise<{ mcpRunning: boolean; tunnelRunning: boolean; tunnelUrl: string | null }>
   serverMcpStart: () => Promise<{ ok: boolean }>
   serverMcpStop: () => Promise<{ ok: boolean }>

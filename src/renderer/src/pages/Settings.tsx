@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FolderOpen, Save, RefreshCw } from 'lucide-react'
+import { FolderOpen, Save, RefreshCw, Download, Upload } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { col, alpha } from '../lib/theme'
 import { MOCK_OFFERS, MOCK_ANSWERS, MOCK_PROFILE } from '../lib/mockData'
@@ -40,6 +40,18 @@ export function SettingsPage() {
     await setOffers([])
     await setAnswers([])
     showNotification('info', 'Datos borrados')
+  }
+
+  const exportData = async () => {
+    const res = await window.api.exportData()
+    if (res.ok) showNotification('success', 'Backup exportado')
+  }
+
+  const importData = async () => {
+    if (!confirm('Importar reemplaza tus datos actuales con los del archivo. ¿Continuar?')) return
+    const res = await window.api.importData()
+    if (res.ok) { await useStore.getState().loadFromStorage(); showNotification('success', 'Datos importados') }
+    else if (res.error) showNotification('error', res.error)
   }
 
   return (
@@ -150,6 +162,22 @@ export function SettingsPage() {
         </div>
         <p className="text-2xs" style={{ color: col.fgMuted }}>
           Los datos se guardan en: ~/Documents/JobPilot/data/
+        </p>
+      </div>
+
+      {/* Backup portátil */}
+      <div className="card flex flex-col gap-3">
+        <div className="section-label">Backup portátil</div>
+        <div className="flex gap-2 flex-wrap">
+          <button className="btn-secondary" onClick={exportData}>
+            <Download size={12} /> Exportar todo a un JSON
+          </button>
+          <button className="btn-secondary" onClick={importData}>
+            <Upload size={12} /> Importar desde JSON
+          </button>
+        </div>
+        <p className="text-2xs" style={{ color: col.fgMuted }}>
+          Exportá perfil, ofertas, respuestas, settings y prompts en un archivo. Importalo en otra PC para tener todo.
         </p>
       </div>
     </div>
