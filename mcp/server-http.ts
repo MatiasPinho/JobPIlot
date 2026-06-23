@@ -86,7 +86,7 @@ ${avoidList}
 1. get_profile — leer el perfil completo del usuario
 2. Verificar que Claude in Chrome está activo y hay sesión en cada portal
 3. Buscar con las keywords del perfil (máximo 2 búsquedas en paralelo por portal — no más, para no parecer un bot)
-4. Por cada oferta relevante: leer descripción completa → evaluar → add_offer
+4. Por cada oferta en los resultados: ANTES de abrirla, llamá add_offer con título, empresa y link. Si responde "ya existe", saltala sin abrirla (ahorrás navegar a algo ya cargado/postulado). Si es nueva, abrí, leé la descripción y completá los datos.
 5. Al terminar todos los portales: add_offers en bloque si acumulaste varias
 6. STOP — reportar cuántas guardaste y distribución de score, luego esperar aprobación del usuario en JobPilot
 
@@ -188,6 +188,22 @@ function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unkn
     scoreBreakdown: { positives, negatives },
     detectedAt: new Date().toISOString()
   }
+}
+
+// ponytail: dedup por link normalizado (saca www/protocolo/query/slash), fallback título+empresa
+function normLink(s: string): string {
+  return String(s).toLowerCase().split('?')[0].replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+}
+function findDup(offers: Array<Record<string, unknown>>, raw: RawOffer): Record<string, unknown> | undefined {
+  const link = (raw.link ?? '').trim()
+  if (link) {
+    const n = normLink(link)
+    const hit = offers.find((o) => o.link && normLink(String(o.link)) === n)
+    if (hit) return hit
+  }
+  const key = `${(raw.title ?? '').trim().toLowerCase()}|${(raw.company ?? '').trim().toLowerCase()}`
+  if (key === '|') return undefined
+  return offers.find((o) => `${String(o.title ?? '').toLowerCase()}|${String(o.company ?? '').toLowerCase()}` === key)
 }
 
 const log = (msg: string) =>
@@ -534,6 +550,10 @@ function createMcpServer() {
           const a = args as RawOffer
           const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
           const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
+          const dup = findDup(offers, a)
+          if (dup) {
+            return { content: [{ type: 'text', text: `Ya existe en JobPilot: "${dup.title}" (estado: ${dup.status}). NO la agregué de nuevo ni la abras — ya está cargada${dup.status === 'postulada' ? ', y ya postulada' : ''}. Saltala.` }] }
+          }
           const newOffer = buildOffer(a, profile)
           offers.push(newOffer)
           writeJson(join(DATA_DIR, 'offers.json'), offers)
@@ -546,15 +566,22 @@ function createMcpServer() {
             return { content: [{ type: 'text', text: 'No se enviaron ofertas.' }] }
           const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
           const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
-          const built = rawOffers.map((r) => buildOffer(r, profile))
+          const skipped: string[] = []
+          const built: Array<Record<string, unknown>> = []
+          for (const r of rawOffers) {
+            const dup = findDup([...offers, ...built], r)
+            if (dup) { skipped.push(`${dup.title} (${dup.status})`); continue }
+            built.push(buildOffer(r, profile))
+          }
           offers.push(...built)
           writeJson(join(DATA_DIR, 'offers.json'), offers)
           const recomendadas = built.filter((o) => o.status === 'recomendada').length
           return {
             content: [{
               type: 'text',
-              text: `${built.length} oferta(s) guardadas en JobPilot. ${recomendadas} recomendadas, ${built.length - recomendadas} detectadas.\n\n` +
-                built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n')
+              text: `${built.length} oferta(s) nuevas guardadas (${recomendadas} recomendadas). ${skipped.length} ya existían y se saltaron.\n\n` +
+                built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n') +
+                (skipped.length ? `\n\nYa existentes (no agregadas): ${skipped.join(', ')}` : '')
             }]
           }
         }

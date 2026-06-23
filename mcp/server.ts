@@ -81,7 +81,7 @@ function buildSearchInstructions(profile: Profile | null, settings: Settings | n
   const avoidList = (profile?.avoid ?? []).length
     ? (profile!.avoid!).map((a) => `- ${a}`).join('\n')
     : '- (ninguno configurado)'
-  return `## PORTALES A BUSCAR\n${portals}\n\n## CRITERIOS DE FILTRO\nPriorizá ofertas que cumplan al menos 3 de:\n- Empresa con buena reputación (4+ estrellas)\n- Salario igual o mayor a la pretensión del perfil\n- Modalidad que coincida con las preferencias del perfil\n- Ubicación dentro de la zona indicada en el perfil o remoto\n- Beneficios mencionados\n\nDESCARTÁ siempre:\n- MLM, ventas a comisión pura sin sueldo base\n- Inversión inicial\n- Reviews negativos visibles\n- Inglés superior a B1\n- SENIOR (5+ años obligatorio)\n- Exclusiones del perfil:\n${avoidList}\n\n## PLAN\n1. get_profile\n2. Verificar Claude in Chrome y sesión en portal\n3. Buscar con keywords del perfil (máximo 2 en paralelo, no más)\n4. add_offer por cada oferta relevante (o add_offers en bloque al final)\n5. STOP — reportar cuántas guardaste, esperar aprobación del usuario en JobPilot\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (búsqueda, navegación, abrir oferta). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules en esta fase\n- No reveles info personal fuera del portal\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
+  return `## PORTALES A BUSCAR\n${portals}\n\n## CRITERIOS DE FILTRO\nPriorizá ofertas que cumplan al menos 3 de:\n- Empresa con buena reputación (4+ estrellas)\n- Salario igual o mayor a la pretensión del perfil\n- Modalidad que coincida con las preferencias del perfil\n- Ubicación dentro de la zona indicada en el perfil o remoto\n- Beneficios mencionados\n\nDESCARTÁ siempre:\n- MLM, ventas a comisión pura sin sueldo base\n- Inversión inicial\n- Reviews negativos visibles\n- Inglés superior a B1\n- SENIOR (5+ años obligatorio)\n- Exclusiones del perfil:\n${avoidList}\n\n## PLAN\n1. get_profile\n2. Verificar Claude in Chrome y sesión en portal\n3. Buscar con keywords del perfil (máximo 2 en paralelo, no más)\n4. Por cada oferta de los resultados: ANTES de abrirla, add_offer con título/empresa/link. Si "ya existe", saltala sin abrir. Si es nueva, abrí y completá datos.\n5. STOP — reportar cuántas guardaste, esperar aprobación del usuario en JobPilot\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (búsqueda, navegación, abrir oferta). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules en esta fase\n- No reveles info personal fuera del portal\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
 }
 
 function buildApplicationInstructions(): string {
@@ -145,6 +145,22 @@ function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unkn
     scoreBreakdown: { positives, negatives },
     detectedAt: new Date().toISOString()
   }
+}
+
+// ponytail: dedup por link normalizado, fallback título+empresa
+function normLink(s: string): string {
+  return String(s).toLowerCase().split('?')[0].replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+}
+function findDup(offers: Array<Record<string, unknown>>, raw: RawOffer): Record<string, unknown> | undefined {
+  const link = (raw.link ?? '').trim()
+  if (link) {
+    const n = normLink(link)
+    const hit = offers.find((o) => o.link && normLink(String(o.link)) === n)
+    if (hit) return hit
+  }
+  const key = `${(raw.title ?? '').trim().toLowerCase()}|${(raw.company ?? '').trim().toLowerCase()}`
+  if (key === '|') return undefined
+  return offers.find((o) => `${String(o.title ?? '').toLowerCase()}|${String(o.company ?? '').toLowerCase()}` === key)
 }
 
 const TOOLS = [
@@ -468,6 +484,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const a = args as RawOffer
         const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
         const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
+        const dup = findDup(offers, a)
+        if (dup) {
+          return { content: [{ type: 'text', text: `Ya existe en JobPilot: "${dup.title}" (estado: ${dup.status}). NO la agregué ni la abras${dup.status === 'postulada' ? ', ya postulada' : ''}. Saltala.` }] }
+        }
         const newOffer = buildOffer(a, profile)
         offers.push(newOffer)
         writeJson(join(DATA_DIR, 'offers.json'), offers)
@@ -480,15 +500,22 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           return { content: [{ type: 'text', text: 'No se enviaron ofertas.' }] }
         const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
         const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
-        const built = rawOffers.map((r) => buildOffer(r, profile))
+        const skipped: string[] = []
+        const built: Array<Record<string, unknown>> = []
+        for (const r of rawOffers) {
+          const dup = findDup([...offers, ...built], r)
+          if (dup) { skipped.push(`${dup.title} (${dup.status})`); continue }
+          built.push(buildOffer(r, profile))
+        }
         offers.push(...built)
         writeJson(join(DATA_DIR, 'offers.json'), offers)
         const recomendadas = built.filter((o) => o.status === 'recomendada').length
         return {
           content: [{
             type: 'text',
-            text: `${built.length} oferta(s) guardadas en JobPilot. ${recomendadas} recomendadas, ${built.length - recomendadas} detectadas.\n\n` +
-              built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n')
+            text: `${built.length} oferta(s) nuevas guardadas (${recomendadas} recomendadas). ${skipped.length} ya existían y se saltaron.\n\n` +
+              built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n') +
+              (skipped.length ? `\n\nYa existentes: ${skipped.join(', ')}` : '')
           }]
         }
       }
