@@ -15525,11 +15525,6 @@ var TOOLS = [
     name: "get_tracker_summary",
     description: "Devuelve un resumen del tracker con m\xE9tricas de la b\xFAsqueda laboral.",
     inputSchema: { type: "object", properties: {}, required: [] }
-  },
-  {
-    name: "get_answers_bank",
-    description: "Devuelve el banco de respuestas frecuentes para usar en formularios de postulaci\xF3n.",
-    inputSchema: { type: "object", properties: {}, required: [] }
   }
 ];
 var server = new Server(
@@ -15610,10 +15605,6 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           errores: offers.filter((o) => o.status === "error").length
         };
         return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
-      }
-      case "get_answers_bank": {
-        const answers = readJson((0, import_path.join)(DATA_DIR, "answers.json"), []);
-        return { content: [{ type: "text", text: JSON.stringify(answers, null, 2) }] };
       }
       default:
         return { content: [{ type: "text", text: `Herramienta desconocida: ${name}` }] };

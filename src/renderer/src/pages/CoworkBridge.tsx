@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   CheckCheck, Upload, Loader2, FileText, Plus, Copy, Power, PowerOff,
-  CheckCircle2, ArrowRight
+  CheckCircle2, ArrowRight, X
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { col, alpha } from '../lib/theme'

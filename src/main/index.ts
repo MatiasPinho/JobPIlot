@@ -14,7 +14,6 @@ const { PDFParse } = require('pdf-parse') as {
 }
 import type {
   SharedProfile,
-  SharedAnswer,
   SharedOffer,
   SharedSettings
 } from '../shared/cowork'
@@ -109,10 +108,6 @@ function registerIpcHandlers(): void {
   ipcMain.handle('offers:get', () => readJson<SharedOffer[]>(join(DATA_DIR, 'offers.json'), []))
   ipcMain.handle('offers:save', (_e, offers: SharedOffer[]) => writeJson(join(DATA_DIR, 'offers.json'), offers))
 
-  // Answers
-  ipcMain.handle('answers:get', () => readJson<SharedAnswer[]>(join(DATA_DIR, 'answers.json'), []))
-  ipcMain.handle('answers:save', (_e, answers: SharedAnswer[]) => writeJson(join(DATA_DIR, 'answers.json'), answers))
-
   // Settings
   ipcMain.handle('settings:get', () => readJson(join(DATA_DIR, 'settings.json'), null))
   ipcMain.handle('settings:save', (_e, settings: SharedSettings) => writeJson(join(DATA_DIR, 'settings.json'), settings))
@@ -177,7 +172,7 @@ function registerIpcHandlers(): void {
   })
 
   // Backup portátil: un JSON con todo. ponytail: help_requests es transitorio, no se exporta.
-  const BACKUP_FILES = ['profile', 'offers', 'answers', 'settings', 'prompts'] as const
+  const BACKUP_FILES = ['profile', 'offers', 'settings', 'prompts'] as const
   ipcMain.handle('data:export', async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
     const res = await dialog.showSaveDialog(win!, {

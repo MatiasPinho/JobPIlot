@@ -6,7 +6,6 @@ import { Dashboard } from '../pages/Dashboard'
 import { Profile } from '../pages/Profile'
 import { Offers } from '../pages/Offers'
 import { Tracker } from '../pages/Tracker'
-import { Answers } from '../pages/Answers'
 import { CoworkBridge } from '../pages/CoworkBridge'
 import { Instructions } from '../pages/Instructions'
 import { SettingsPage } from '../pages/Settings'
@@ -17,7 +16,6 @@ const PAGES = {
   profile:   Profile,
   offers:    Offers,
   tracker:   Tracker,
-  answers:   Answers,
   bridge:       CoworkBridge,
   instructions: Instructions,
   settings:     SettingsPage

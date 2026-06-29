@@ -1,23 +1,55 @@
-import type { JobOffer, FrequentAnswer, UserProfile, AppSettings } from '../types'
+import type { JobOffer, UserProfile, AppSettings } from '../types'
 
-/** Perfil vacío — estado real al primer arranque */
+export const DEFAULT_AVOID_FILTERS = [
+  'MLM',
+  'Ventas a comisión pura sin sueldo base',
+  'Inversión inicial',
+  'Reviews negativos visibles',
+  'Zona muy alejada no remota',
+  'Inglés superior a B1',
+  'Senior',
+  'G&L GROUP'
+]
+
+export const DEFAULT_STACK = ['React', 'TypeScript', 'Angular', 'APIs REST', 'Jest / React Testing Library']
+export const DEFAULT_SOFT_SKILLS = ['Trabajo en equipo', 'Comunicación con clientes y equipos técnicos', 'Adaptabilidad']
+
+/** Perfil base — el usuario completa identidad/stack y conserva filtros seguros */
 export const DEFAULT_PROFILE: UserProfile = {
   targetRole: '',
-  mainStack: [],
+  personalInfo: {
+    dni: '',
+    email: '',
+    phone: '',
+    address: ''
+  },
+  mainStack: [...DEFAULT_STACK],
   secondaryStack: [],
   experience: '',
+  softSkills: [...DEFAULT_SOFT_SKILLS],
+  salaryExpectation: 'USD 2000 como mínimo',
+  availability: ['Full-time'],
   preferredModality: [],
   preferredLocation: [],
-  avoid: [],
+  avoid: [...DEFAULT_AVOID_FILTERS],
   updatedAt: new Date().toISOString()
 }
 
 /** Perfil de ejemplo — solo para el botón "Cargar datos de prueba" en Settings */
 export const MOCK_PROFILE: UserProfile = {
   targetRole: 'Frontend Developer SSR',
-  mainStack: ['React', 'TypeScript', 'Angular'],
-  secondaryStack: ['APIs REST', 'Testing (Jest/Vitest)', 'Componentes reutilizables', 'Scrum', 'Design Systems'],
+  personalInfo: {
+    dni: '',
+    email: '',
+    phone: '',
+    address: ''
+  },
+  mainStack: [...DEFAULT_STACK],
+  secondaryStack: [],
   experience: '2+ años de experiencia en desarrollo frontend',
+  softSkills: [...DEFAULT_SOFT_SKILLS],
+  salaryExpectation: 'USD 2000 como mínimo',
+  availability: ['Full-time'],
   preferredModality: ['Remoto', 'Híbrido'],
   preferredLocation: ['CABA', 'AMBA'],
   avoid: [
@@ -25,62 +57,16 @@ export const MOCK_PROFILE: UserProfile = {
     'Backend dominante',
     'Presencial fuera de CABA/AMBA',
     'Senior 5+ años obligatorio',
-    'Inglés avanzado excluyente'
+    'Inglés avanzado excluyente',
+    ...DEFAULT_AVOID_FILTERS
   ],
   updatedAt: new Date().toISOString()
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   workFolder: '',
-  scoreThresholdRecommended: 65,
-  scoreThresholdReject: 35,
   portals: ['LinkedIn', 'Bumeran', 'Zonajobs', 'GetOnBoard', 'Computrabajo']
 }
-
-export const MOCK_ANSWERS: FrequentAnswer[] = [
-  {
-    id: 'ans-1',
-    question: '¿Por qué querés trabajar en esta empresa?',
-    answer: 'Me atrae el desafío técnico y la posibilidad de crecer en un equipo que apuesta por buenas prácticas de desarrollo frontend.',
-    tags: ['motivacion', 'empresa'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ans-2',
-    question: '¿Cuál es tu pretensión salarial?',
-    answer: 'Estoy buscando una posición entre USD 1500 y USD 2500 según el tipo de empresa y beneficios incluidos.',
-    tags: ['salario', 'expectativas'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ans-3',
-    question: '¿Tenés disponibilidad para trabajar de forma remota?',
-    answer: 'Sí, tengo oficina en casa con buena conexión a internet y experiencia trabajando de forma remota.',
-    tags: ['modalidad', 'remoto'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ans-4',
-    question: '¿Cuántos años de experiencia tenés con React?',
-    answer: 'Tengo más de 2 años de experiencia trabajando con React y TypeScript en proyectos de mediana a gran escala.',
-    tags: ['experiencia', 'react'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ans-5',
-    question: '¿Tenés experiencia con metodologías ágiles?',
-    answer: 'Sí, he trabajado con Scrum en equipos de 4 a 8 personas, participando en plannings, dailies, reviews y retrospectivas.',
-    tags: ['metodologia', 'scrum'],
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ans-6',
-    question: '¿Por qué te interesa cambiar de trabajo?',
-    answer: 'Busco nuevos desafíos técnicos y la posibilidad de contribuir a un producto con mayor impacto y escala.',
-    tags: ['motivacion', 'cambio'],
-    createdAt: new Date().toISOString()
-  }
-]
 
 export const MOCK_OFFERS: JobOffer[] = [
   {

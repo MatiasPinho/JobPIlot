@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, ExternalLink, Check, X, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, Check, X, Info, Send } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { ScoreBar } from '../components/ui/ScoreBar'
@@ -34,10 +34,12 @@ function OfferCard({ offer }: { offer: JobOffer }) {
   const [expanded, setExpanded] = useState(false)
   const approveOffer = useStore((s) => s.approveOffer)
   const rejectOffer  = useStore((s) => s.rejectOffer)
+  const markOfferApplied = useStore((s) => s.markOfferApplied)
   const updateOffer  = useStore((s) => s.updateOffer)
 
   const canApprove = ['recomendada', 'detectada'].includes(offer.status)
-  const canReject  = ['recomendada', 'detectada', 'aprobada'].includes(offer.status)
+  const canReject  = ['recomendada', 'detectada', 'aprobada', 'pendiente_manual'].includes(offer.status)
+  const canMarkApplied = !['postulada', 'duplicada'].includes(offer.status)
 
   return (
     <div
@@ -198,6 +200,20 @@ function OfferCard({ offer }: { offer: JobOffer }) {
                 onClick={() => updateOffer(offer.id, { status: 'recomendada' })}>
                 Desaprobar
               </button>
+            )}
+            {canMarkApplied && (
+              <button
+                className="btn-secondary"
+                style={{ minHeight: 28, padding: '0 0.75rem', fontSize: 'var(--text-2xs)', color: col.violet, borderColor: alpha(col.violet, 0.4) }}
+                onClick={() => markOfferApplied(offer.id)}
+              >
+                <Send size={12} /> Marcar como postulada
+              </button>
+            )}
+            {offer.status === 'postulada' && offer.appliedAt && (
+              <span className="text-2xs ml-auto" style={{ color: col.violet }}>
+                Postulada el {new Date(offer.appliedAt).toLocaleDateString('es-AR')}
+              </span>
             )}
             {offer.duplicateOf && (
               <span className="text-2xs flex items-center gap-1 ml-auto" style={{ color: col.fgMuted }}>

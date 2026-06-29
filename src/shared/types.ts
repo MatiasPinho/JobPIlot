@@ -40,8 +40,6 @@ export interface IElectronAPI {
   saveProfile: (profile: unknown) => Promise<void>
   getOffers: () => Promise<unknown[]>
   saveOffers: (offers: unknown[]) => Promise<void>
-  getAnswers: () => Promise<unknown[]>
-  saveAnswers: (answers: unknown[]) => Promise<void>
   getSettings: () => Promise<unknown>
   saveSettings: (settings: unknown) => Promise<void>
 

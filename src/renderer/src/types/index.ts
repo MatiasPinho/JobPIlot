@@ -14,30 +14,30 @@ export type View =
   | 'profile'
   | 'offers'
   | 'tracker'
-  | 'answers'
   | 'bridge'
   | 'instructions'
   | 'settings'
 
 export interface UserProfile {
   targetRole: string
+  personalInfo: {
+    dni: string
+    email: string
+    phone: string
+    address: string
+  }
   mainStack: string[]
   secondaryStack: string[]
   experience: string
+  softSkills: string[]
+  salaryExpectation: string
+  availability: string[]
   preferredModality: string[]
   preferredLocation: string[]
   avoid: string[]
   cvPath?: string
   cvText?: string
   updatedAt: string
-}
-
-export interface FrequentAnswer {
-  id: string
-  question: string
-  answer: string
-  tags: string[]
-  createdAt: string
 }
 
 export interface JobOffer {
@@ -64,8 +64,6 @@ export interface JobOffer {
 
 export interface AppSettings {
   workFolder: string
-  scoreThresholdRecommended: number
-  scoreThresholdReject: number
   portals: string[]
 }
 
@@ -102,8 +100,6 @@ export interface ElectronAPI {
   saveProfile: (profile: UserProfile) => Promise<void>
   getOffers: () => Promise<JobOffer[]>
   saveOffers: (offers: JobOffer[]) => Promise<void>
-  getAnswers: () => Promise<FrequentAnswer[]>
-  saveAnswers: (answers: FrequentAnswer[]) => Promise<void>
   getSettings: () => Promise<AppSettings>
   saveSettings: (settings: AppSettings) => Promise<void>
 

@@ -2,14 +2,13 @@ import { useState } from 'react'
 import { FolderOpen, Save, RefreshCw, Download, Upload } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { col, alpha } from '../lib/theme'
-import { MOCK_OFFERS, MOCK_ANSWERS, MOCK_PROFILE } from '../lib/mockData'
+import { MOCK_OFFERS, MOCK_PROFILE } from '../lib/mockData'
 import type { AppSettings } from '../types'
 
 export function SettingsPage() {
   const settings         = useStore((s) => s.settings)
   const setSettings      = useStore((s) => s.setSettings)
   const setOffers        = useStore((s) => s.setOffers)
-  const setAnswers       = useStore((s) => s.setAnswers)
   const setProfile       = useStore((s) => s.setProfile)
   const showNotification = useStore((s) => s.showNotification)
 
@@ -19,7 +18,7 @@ export function SettingsPage() {
     setForm((f) => ({ ...f, [key]: value }))
 
   const save = async () => {
-    await setSettings(form)
+    await setSettings({ ...form, portals: settings.portals })
     showNotification('success', 'Configuración guardada')
   }
 
@@ -31,14 +30,12 @@ export function SettingsPage() {
   const loadMockData = async () => {
     await setProfile({ ...MOCK_PROFILE, updatedAt: new Date().toISOString() })
     await setOffers(MOCK_OFFERS)
-    await setAnswers(MOCK_ANSWERS)
-    showNotification('success', 'Datos de prueba cargados — 8 ofertas, 6 respuestas')
+    showNotification('success', 'Datos de prueba cargados — 8 ofertas')
   }
 
   const clearAllData = async () => {
-    if (!confirm('¿Seguro que querés borrar todas las ofertas y respuestas? El perfil se mantiene.')) return
+    if (!confirm('¿Seguro que querés borrar todas las ofertas? El perfil se mantiene.')) return
     await setOffers([])
-    await setAnswers([])
     showNotification('info', 'Datos borrados')
   }
 
@@ -89,66 +86,7 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div>
-          <div className="label">Portales de búsqueda</div>
-          <p className="text-2xs mb-2" style={{ color: col.fgMuted }}>
-            Lista separada por comas que se incluye en la tarea para Cowork.
-          </p>
-          <input
-            className="input"
-            value={form.portals.join(', ')}
-            onChange={(e) => set('portals', e.target.value.split(',').map((p) => p.trim()).filter(Boolean))}
-            placeholder="LinkedIn, Bumeran, Zonajobs, GetOnBoard, Computrabajo"
-          />
-        </div>
       </div>
-
-      {/* Scoring thresholds */}
-      <div className="card flex flex-col gap-4">
-        <div className="section-label">Umbrales de scoring</div>
-
-        <div className="grid grid-cols-2 gap-5">
-          <div>
-            <div className="label">
-              Recomendada ≥{' '}
-              <span style={{ color: col.cream }}>{form.scoreThresholdRecommended}</span>
-            </div>
-            <input
-              type="range" min="50" max="90" step="5"
-              className="w-full mt-1"
-              style={{ accentColor: col.cream }}
-              value={form.scoreThresholdRecommended}
-              onChange={(e) => set('scoreThresholdRecommended', Number(e.target.value))}
-            />
-            <div className="flex justify-between text-2xs mt-0.5" style={{ color: col.fgMuted }}>
-              <span>50</span><span>90</span>
-            </div>
-          </div>
-          <div>
-            <div className="label">
-              Rechazar &lt;{' '}
-              <span style={{ color: col.red }}>{form.scoreThresholdReject}</span>
-            </div>
-            <input
-              type="range" min="10" max="50" step="5"
-              className="w-full mt-1"
-              style={{ accentColor: col.red }}
-              value={form.scoreThresholdReject}
-              onChange={(e) => set('scoreThresholdReject', Number(e.target.value))}
-            />
-            <div className="flex justify-between text-2xs mt-0.5" style={{ color: col.fgMuted }}>
-              <span>10</span><span>50</span>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-2xs" style={{ color: col.fgMuted }}>
-          Score ≥ {form.scoreThresholdRecommended} → Recomendada &nbsp;·&nbsp;
-          {form.scoreThresholdReject}–{form.scoreThresholdRecommended - 1} → Detectada &nbsp;·&nbsp;
-          &lt; {form.scoreThresholdReject} → Rechazada
-        </p>
-      </div>
-
       {/* Data */}
       <div className="card flex flex-col gap-3">
         <div className="section-label">Datos</div>
@@ -157,7 +95,7 @@ export function SettingsPage() {
             <RefreshCw size={12} /> Cargar datos de prueba
           </button>
           <button className="btn-danger" onClick={clearAllData}>
-            Borrar ofertas y respuestas
+            Borrar ofertas
           </button>
         </div>
         <p className="text-2xs" style={{ color: col.fgMuted }}>
@@ -177,7 +115,7 @@ export function SettingsPage() {
           </button>
         </div>
         <p className="text-2xs" style={{ color: col.fgMuted }}>
-          Exportá perfil, ofertas, respuestas, settings y prompts en un archivo. Importalo en otra PC para tener todo.
+          Exportá perfil, ofertas, settings y prompts en un archivo. Importalo en otra PC para tener todo.
         </p>
       </div>
     </div>

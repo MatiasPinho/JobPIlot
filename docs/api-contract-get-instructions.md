@@ -1,182 +1,187 @@
-# Contrato de API — `get_instructions`
+# Contrato MCP - `get_instructions`
 
-## Contexto y motivación
+Este documento describe el comportamiento actual de `get_instructions`.
 
-El system prompt actual de JobPilot está hardcodeado en la configuración del proyecto Cowork.
-Eso genera tres problemas:
-1. El usuario no puede editarlo sin acceder a settings técnicos
-2. Los portales están hardcodeados en el texto aunque ya se configuran en Settings
-3. Cualquier cambio al prompt requiere editar la config manualmente
+La regla del proyecto es:
 
-**Solución:** un único tool MCP `get_instructions` que Claude llama al inicio de cada sesión.
-Devuelve instrucciones dinámicas, personalizadas por usuario, con portales resueltos en runtime.
-
----
-
-## Tool: `get_instructions`
-
-### Descripción
-Devuelve las instrucciones completas del agente para la sesión actual.
-Claude debe llamarlo **siempre como primer paso**, antes de cualquier acción.
-Reemplaza todo el system prompt hardcodeado en el proyecto Cowork.
-
-### Request
-
-```
-GET /mcp/get_instructions
+```text
+Antes de ejecutar cualquier tarea, Cowork debe llamar:
+1. get_profile
+2. get_instructions con el mode correspondiente
 ```
 
-Sin parámetros. Usa el contexto de autenticación del usuario.
+## Tool
 
----
+`get_instructions`
 
-### Response
+## Input
 
 ```json
 {
-  "agent_role": "string",
-  "profile_summary": {
-    "name": "string",
-    "target_role": "string",
-    "seniority": "string",
-    "modality": ["remoto", "híbrido", "presencial"],
-    "location": "string",
-    "salary_expectation": "string",
-    "english_level": "string",
-    "cv_path": "string"
-  },
-  "portals": [
-    {
-      "name": "string",
-      "url": "string",
-      "enabled": true
-    }
-  ],
-  "filter_criteria": {
-    "min_stars": 4,
-    "require_base_salary": true,
-    "exclude_mlm": true,
-    "exclude_senior_only": true,
-    "max_english_level": "B1",
-    "excluded_companies": ["G&L GROUP"],
-    "min_criteria_match": 3
-  },
-  "prompts": {
-    "search": {
-      "content": "string",
-      "is_custom": false
-    },
-    "cover_letter": {
-      "content": "string",
-      "is_custom": false
-    }
-  },
-  "workflow": {
-    "steps": ["search", "evaluate", "save", "wait_approval", "apply", "report"],
-    "current_step": "search"
-  }
+  "mode": "busqueda"
 }
 ```
 
----
+o:
 
-### Campos clave
-
-#### `portals`
-Lista de portales **activos** según la configuración del usuario en Settings.
-Claude itera sobre estos para buscar. No hay portales hardcodeados en ningún prompt.
-
-#### `prompts.search.content`
-Instrucciones para la fase de búsqueda y evaluación de ofertas.
-Si `is_custom: false`, se devuelve el texto default del sistema.
-Si `is_custom: true`, se devuelve la versión editada por el usuario.
-
-#### `prompts.cover_letter.content`
-Instrucciones para redactar la carta de presentación.
-Misma lógica: default o personalizada.
-
-#### `filter_criteria`
-Criterios de filtro centralizados. Claude los aplica al evaluar cada oferta.
-No están hardcodeados en el prompt — vienen del backend y pueden cambiar sin tocar Cowork.
-
-#### `workflow.current_step`
-Permite reanudar sesiones interrumpidas. Si el usuario ya aprobó ofertas en una sesión anterior,
-el agente puede arrancar directo en `apply` en lugar de `search`.
-
----
-
-## Settings — UI de prompts editables
-
-### Pantalla: Configuración del Agente
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Prompt de búsqueda                          [Resetear] │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ Buscá ofertas compatibles con mi perfil en los    │  │
-│  │ portales configurados. Por cada oferta...         │  │
-│  │                                                   │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                                         │
-│  Prompt de carta de presentación             [Resetear] │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │ Redactá una carta de 2-3 párrafos para la empresa │  │
-│  │ {empresa} aplicando al rol {rol}. Destacá...      │  │
-│  └───────────────────────────────────────────────────┘  │
-│                                     [Guardar cambios]   │
-└─────────────────────────────────────────────────────────┘
+```json
+{
+  "mode": "postulacion"
+}
 ```
 
-- El botón **[Resetear]** restaura el default del sistema para ese prompt específico
-  (sin afectar el otro)
-- Los prompts soportan variables de interpolación: `{empresa}`, `{rol}`, `{nombre}`, etc.
-- Al guardar, el backend marca `is_custom: true` y persiste el texto
-- `get_instructions` devuelve la versión custom si existe, default si no
+Valores validos:
 
----
+- `busqueda`
+- `postulacion`
 
-## System prompt de Cowork (versión simplificada)
+## Output
 
-Con este diseño, el system prompt hardcodeado en Cowork se reduce a:
+Devuelve un bloque de texto MCP:
 
-```
-Sos un agente de búsqueda de empleo conectado a JobPilot via MCP.
-Al iniciar cada sesión, llamá a get_instructions para recibir tu rol,
-perfil, portales activos, criterios de filtro e instrucciones completas.
-Seguí exactamente las instrucciones devueltas por get_instructions.
-```
-
-Todo lo demás — portales, criterios, prompts, workflow — viene del tool.
-
----
-
-## Flujo de inicio de sesión
-
-```
-Claude arranca
-    │
-    ▼
-get_instructions()
-    │
-    ├── profile_summary     → sabe para qué perfil trabajar
-    ├── portals             → sabe dónde buscar
-    ├── filter_criteria     → sabe qué descartar
-    ├── prompts.search      → sabe cómo buscar (custom o default)
-    ├── prompts.cover_letter → sabe cómo escribir cartas
-    └── workflow.current_step → sabe en qué paso retomar
-    │
-    ▼
-Ejecuta el workflow desde current_step
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "..."
+    }
+  ]
+}
 ```
 
----
+No devuelve un JSON estructurado de workflow. Cowork debe leer el texto y seguirlo.
 
-## Consideraciones de implementación
+## Fuentes de datos
 
-| Aspecto | Detalle |
-|---|---|
-| Auth | Usa el token de sesión del usuario; no recibe userId como parámetro |
-| Cache | No cachear; llamar en cada inicio de sesión para reflejar cambios en Settings |
-| Defaults | Los prompts default se definen en el backend, no en el frontend ni en Cowork |
-| Variables | Interpolar `{empresa}`, `{rol}`, etc. del lado del agente antes de usar el prompt |
-| Extensibilidad | Agregar nuevos prompts (ej: `follow_up`) sin romper contratos existentes |
+`get_instructions` arma el texto desde:
+
+- `profile.json`
+- `settings.json`
+
+No lee prompts editables desde la UI. La pantalla Instrucciones solo muestra el preview de lo que Cowork recibe.
+
+## Modo `busqueda`
+
+Incluye:
+
+- rol objetivo
+- experiencia
+- stack completo desde Perfil
+- soft skills
+- pretension salarial
+- modalidad preferida
+- disponibilidad
+- zona de residencia
+- criterios de priorizacion
+- filtros de exclusion desde Perfil
+- portales desde Perfil/Settings
+- plan de tareas de busqueda
+- regla de presentar top 10 y esperar confirmacion
+- regla de no postular
+
+No incluye:
+
+- datos personales
+- advertencia visual de datos sensibles
+- texto del CV
+- respuestas guardadas antiguas
+- umbrales editables de scoring
+
+## Modo `postulacion`
+
+Incluye:
+
+- trabajar solo sobre ofertas aprobadas en JobPilot
+- llamar `list_approved_offers`
+- adjuntar CV si existe `cvPath`
+- pedir carta o mensaje personalizado al usuario
+- marcar exito con `mark_offer_applied`
+- registrar errores con `register_error`
+- pedir ayuda humana si hay captcha, login, test tecnico o bloqueo
+
+Regla central:
+
+```text
+NUNCA postular sin aprobacion humana en JobPilot.
+```
+
+## Variables
+
+Los portales se resuelven desde `settings.portals`.
+
+Si no hay portales configurados, el texto conserva placeholders como:
+
+- `{portal_url}`
+- `{portal}`
+
+El perfil no usa placeholders porque se inserta como texto ya resuelto desde `profile.json`.
+
+## Relacion con `get_profile`
+
+`get_profile` devuelve el perfil completo. Eso incluye campos que `get_instructions` no imprime necesariamente.
+
+Campos relevantes que Cowork puede ver por `get_profile`:
+
+- `targetRole`
+- `personalInfo`
+- `mainStack`
+- `secondaryStack` por compatibilidad, hoy vacio desde la UI
+- `experience`
+- `softSkills`
+- `salaryExpectation`
+- `availability`
+- `preferredModality`
+- `preferredLocation`
+- `avoid`
+- `cvPath`
+- `cvText`
+- `updatedAt`
+
+Transparencia importante:
+
+- `personalInfo` puede llegar a Cowork por `get_profile`.
+- `cvText` puede llegar a Cowork por `get_profile`.
+- Ninguno de esos dos campos influye en scoring.
+- La advertencia de datos sensibles solo se muestra en la UI.
+
+## Scoring y estados
+
+El scoring debe coincidir entre app y MCP:
+
+- Score mayor o igual a 65: `recomendada`
+- Score entre 35 y 64: `detectada`
+- Score menor a 35: `rechazada`
+
+Formula actual:
+
+- Base 42.
+- Stack: +8 por match, maximo +30.
+- Modalidad preferida: +6.
+- Ubicacion preferida: +6.
+- Filtros de exclusion: -18 por match.
+
+## Duplicados y ofertas ya postuladas
+
+Cuando Cowork registra ofertas con `add_offer` o `add_offers`, el MCP intenta detectar duplicados por:
+
+- URL normalizada
+- misma empresa y titulo similar
+
+Si la oferta duplicada ya esta `postulada`, el MCP devuelve un mensaje indicando que ya estaba cargada y postulada.
+
+Esto no reemplaza la observacion visual del portal. Cowork igual debe mirar si el portal muestra que ya fue aplicada.
+
+## System prompt minimo para Cowork
+
+```text
+Sos un agente de busqueda y postulacion de empleo conectado a JobPilot via MCP.
+
+Antes de ejecutar cualquier tarea siempre llama a:
+1. get_profile
+2. get_instructions con el mode correspondiente
+
+Nunca postules sin aprobacion explicita del usuario en JobPilot.
+```
+
+Ese es el unico texto que hace falta cargar en las instrucciones del proyecto Cowork. El resto lo entrega JobPilot por MCP.

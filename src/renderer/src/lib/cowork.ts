@@ -5,6 +5,5 @@ export {
   generateOfferSchemaJson,
   generateApplicationTaskMd,
   generateApprovedOffersJson,
-  generateAnswersBankJson,
   generateTrackerCsv
 } from '../../../shared/cowork'

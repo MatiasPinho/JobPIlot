@@ -1,162 +1,166 @@
 # JobPilot
 
-Centro de control para búsqueda laboral con Claude Cowork.
+Centro de control local para busqueda laboral con Claude Cowork.
 
-JobPilot **no reemplaza a Claude Cowork** — es el cerebro que organiza el flujo. Cowork sigue siendo el operador que usa Chrome y navega portales. JobPilot guarda el perfil, puntúa ofertas, evita duplicados, genera tareas para Cowork y registra resultados.
+JobPilot no reemplaza a Claude Cowork. JobPilot guarda el perfil, portales, ofertas, aprobaciones y estado del tracker. Cowork sigue siendo el operador que usa Chrome, lee portales y ejecuta postulaciones mediante herramientas MCP.
+
+## Estado actual
+
+- App desktop en desarrollo, pensada para correr localmente.
+- Los datos se guardan en JSON local, sin cloud ni login propio.
+- Cowork se conecta a JobPilot por MCP desde la pantalla Conexion Cowork.
+- Las instrucciones largas no se editan a mano: se generan desde Perfil y Portales.
+- Las postulaciones requieren aprobacion humana previa dentro de JobPilot.
+
+Hoy no esta cubierto todo por tests. Hay tests para scoring y deduplicacion, pero faltan tests de UI, flujo MCP completo, aprobacion/postulacion y empaquetado.
 
 ## Stack
 
 - Electron 31 + electron-vite
 - React 18 + TypeScript
 - Tailwind CSS
-- Zustand (estado)
-- JSON local en `~/Documents/JobPilot/` (sin cloud, sin login)
+- Zustand
+- Vitest
+- MCP SDK
+- JSON local en `~/Documents/JobPilot/data`
 
 ## Comandos
 
 ```bash
 npm install
-npm run dev          # Electron + React en modo desarrollo
-npm run build        # Build de producción
-npm run typecheck    # Verificación de tipos sin compilar
-npm run test         # Tests con Vitest (scoring y deduplicación)
-npm run mcp:dev      # Servidor MCP experimental (stdio)
+npm run dev
+npm run build
+npm run typecheck
+npm run test
+npm run mcp:dev
+npm run mcp:http
 ```
 
-## Estructura de datos
+`npm run test -- --coverage` requiere instalar/configurar `@vitest/coverage-v8`.
 
-Todos los datos se guardan en `~/Documents/JobPilot/`:
+## Datos locales
 
-```
-~/Documents/JobPilot/
-├── data/
-│   ├── profile.json      # Perfil laboral
-│   ├── offers.json       # Todas las ofertas
-│   ├── answers.json      # Banco de respuestas
-│   └── settings.json     # Configuración
-└── cowork/
-    ├── busqueda/
-    │   ├── 01_perfil.md                # Generado por JobPilot → Cowork
-    │   ├── 02_tarea_busqueda.md        # Generado por JobPilot → Cowork
-    │   ├── 03_schema_ofertas.json      # Schema de referencia
-    │   └── ofertas_encontradas.json    # Cowork escribe aquí → JobPilot lee
-    └── postulacion/
-        ├── 01_tarea_postulacion.md     # Generado por JobPilot → Cowork
-        ├── 02_ofertas_aprobadas.json   # Generado por JobPilot → Cowork
-        ├── 03_banco_respuestas.json    # Generado por JobPilot → Cowork
-        └── resultados.json             # Cowork escribe aquí → JobPilot lee
+JobPilot persiste datos en:
+
+```text
+~/Documents/JobPilot/data/
+  profile.json
+  offers.json
+  settings.json
+  help_requests.json
 ```
 
-## Flujo completo
+Archivos principales:
 
-### Fase 1 — Búsqueda
+- `profile.json`: perfil laboral, stack, filtros, datos personales opcionales, CV y texto extraido del CV.
+- `settings.json`: configuracion minima de app y portales de busqueda.
+- `offers.json`: ofertas detectadas, recomendadas, aprobadas, postuladas, duplicadas o con error.
+- `help_requests.json`: pedidos de ayuda que Cowork deja cuando necesita intervencion humana.
 
-1. Completá tu perfil en **Perfil**
-2. En **Cowork Bridge** → "Preparar búsqueda para Cowork"
-3. JobPilot genera los archivos en `cowork/busqueda/`
-4. Abrís `02_tarea_busqueda.md` con Claude Cowork
-5. Cowork busca ofertas en portales y guarda `ofertas_encontradas.json`
-6. En **Cowork Bridge** → "Importar ofertas encontradas"
-7. JobPilot procesa las ofertas: scoring, deduplicación, clasificación automática
-8. En **Ofertas** revisás las recomendadas y aprobás las que te gustan
+## Flujo de uso
 
-### Fase 2 — Postulación
+1. Completar Perfil.
+2. Cargar portales de busqueda en Perfil.
+3. Abrir Conexion Cowork.
+4. Iniciar el servidor MCP y el tunel si hace falta.
+5. Copiar la URL MCP en Claude Cowork.
+6. En Instrucciones, copiar una sola vez el system prompt corto del proyecto.
+7. Pedirle a Cowork que busque ofertas.
+8. Revisar las ofertas en JobPilot y aprobar solo las que correspondan.
+9. Pedirle a Cowork que postule a las aprobadas.
+10. Revisar resultados en Tracker y Dashboard.
 
-9. En **Cowork Bridge** → "Preparar postulación para Cowork"
-10. JobPilot genera los archivos en `cowork/postulacion/`
-11. Abrís `01_tarea_postulacion.md` con Claude Cowork
-12. Cowork postula a cada oferta aprobada y guarda `resultados.json`
-13. En **Cowork Bridge** → "Importar resultados de postulación"
-14. El **Tracker** se actualiza automáticamente
+La pantalla Instrucciones no es para editar el prompt. Sirve para ver y copiar los textos que Cowork necesita. El contenido operativo sale de Perfil y Portales.
+
+## Que lee Cowork
+
+Cowork debe llamar siempre:
+
+1. `get_profile`
+2. `get_instructions` con `mode: "busqueda"` o `mode: "postulacion"`
+
+`get_profile` devuelve el perfil completo, incluyendo:
+
+- rol objetivo
+- stack
+- experiencia
+- soft skills
+- pretension salarial
+- disponibilidad
+- modalidad y ubicacion preferidas
+- filtros de exclusion
+- datos personales opcionales
+- ruta y texto del CV, si existe
+
+`get_instructions` devuelve el plan textual para la tarea actual. En busqueda usa perfil y portales. En postulacion refuerza que solo puede trabajar con ofertas aprobadas.
+
+Los datos personales existen para completar formularios si el portal los pide. No influyen en scoring. La advertencia visual de datos sensibles solo vive en la UI y no se envia como instruccion a Cowork.
+
+## Herramientas MCP
+
+| Herramienta | Uso |
+|---|---|
+| `get_profile` | Lee el perfil actualizado del usuario. |
+| `get_instructions` | Devuelve instrucciones para busqueda o postulacion. |
+| `list_offers` | Lista ofertas por estado. |
+| `list_approved_offers` | Lista solo ofertas aprobadas para postular. |
+| `add_offer` | Registra una oferta encontrada por Cowork. |
+| `add_offers` | Registra varias ofertas encontradas por Cowork. |
+| `mark_offer_applied` | Marca una oferta como postulada. |
+| `register_error` | Registra error, pendiente manual o pendiente test. |
+| `request_human_help` | Pide ayuda al usuario desde JobPilot. |
+| `request_cover_letter` | Pide al usuario una carta o mensaje personalizado. |
+| `get_tracker_summary` | Devuelve resumen de seguimiento. |
+
+## Reglas duras
+
+- Cowork nunca debe postular sin aprobacion explicita en JobPilot.
+- Cowork debe usar `list_approved_offers` para postular.
+- Cowork debe pedir carta o mensaje personalizado al usuario antes de enviar una postulacion que la requiera.
+- Si una oferta ya existe, `add_offer` y `add_offers` intentan detectarla como duplicada.
+- Si la oferta ya esta postulada y Cowork intenta agregarla otra vez, el MCP responde que ya estaba cargada/postulada.
+- Si hay captcha, login, test tecnico o duda importante, Cowork debe pedir ayuda humana.
 
 ## Scoring
 
-Las ofertas se puntúan de 0 a 100 según el perfil:
+El scoring va de 0 a 100:
 
-| Señal | Puntos |
-|-------|--------|
-| React | +15 |
-| TypeScript | +12 |
-| Angular | +12 |
-| Frontend explícito | +10 |
-| Remoto | +10 |
-| Híbrido | +6 |
-| CABA/AMBA | +5 |
-| SSR / 2-3 años experiencia | +6 |
-| APIs REST / Testing / Scrum | +3-4 c/u |
-| **Soporte / Help Desk** | **-25** |
-| Seniority 5+ años obligatorio | -20 |
-| Infraestructura / DevOps | -20 |
-| Presencial (sin híbrido) | -12 |
-| Backend dominante | -15 |
-| Inglés avanzado excluyente | -12 |
+- Base: 42 puntos.
+- Cada tecnologia del stack que aparece en titulo, descripcion o requisitos suma 8 puntos.
+- El stack suma como maximo 30 puntos.
+- Modalidad preferida suma 6 puntos.
+- Ubicacion preferida suma 6 puntos.
+- Cada filtro de exclusion encontrado resta 18 puntos.
 
-**Clasificación automática** (umbrales configurables en Settings):
-- Score ≥ 65 → `recomendada`
-- Score 35-64 → `detectada`
-- Score < 35 → `rechazada`
+Clasificacion:
+
+| Score | Estado |
+|---|---|
+| 65 a 100 | `recomendada` |
+| 35 a 64 | `detectada` |
+| 0 a 34 | `rechazada` |
+
+El stack secundario fue eliminado de la UI. La totalidad del stack editable vive en Perfil como un unico campo.
 
 ## Estados de ofertas
 
-| Estado | Descripción |
-|--------|-------------|
-| `detectada` | Importada, score medio, requiere revisión |
-| `recomendada` | Score alto, sugerida para aprobar |
-| `aprobada` | Aprobada para postular |
-| `rechazada` | Descartada manualmente o por score bajo |
-| `postulada` | Cowork la procesó con éxito |
-| `pendiente_manual` | Captcha u obstáculo que requiere intervención humana |
-| `pendiente_test` | Requiere completar un test técnico |
-| `error` | Error de carga u otro problema técnico |
-| `duplicada` | Misma oferta ya existente en el sistema |
+| Estado | Significado |
+|---|---|
+| `detectada` | Oferta cargada, requiere revision. |
+| `recomendada` | Buen match segun scoring. |
+| `aprobada` | El usuario la aprobo para postular. |
+| `rechazada` | Descartada por usuario o score bajo. |
+| `postulada` | Cowork marco la postulacion como enviada. |
+| `pendiente_manual` | Requiere intervencion humana. |
+| `pendiente_test` | Requiere test tecnico antes de continuar. |
+| `error` | Hubo un problema al procesarla. |
+| `duplicada` | Ya existe una oferta equivalente. |
 
-## MCP Server (experimental)
+## Desarrollo pendiente
 
-El servidor MCP permite que Claude Cowork interactúe con JobPilot directamente,
-sin necesidad de archivos intermedios.
-
-### Configurar en Claude Code
-
-Agregá al `~/.claude/claude_desktop_config.json` o al MCP config de tu cliente:
-
-```json
-{
-  "mcpServers": {
-    "jobpilot": {
-      "command": "node",
-      "args": ["--loader", "ts-node/esm", "mcp/server.ts"],
-      "cwd": "C:/Users/mati1/projects/jobpilot"
-    }
-  }
-}
-```
-
-### Herramientas disponibles
-
-| Herramienta | Descripción |
-|------------|-------------|
-| `get_profile` | Devuelve el perfil laboral |
-| `list_approved_offers` | Lista ofertas aprobadas listas para postular |
-| `list_offers` | Lista ofertas filtradas por estado |
-| `mark_offer_applied` | Marca una oferta como postulada |
-| `register_error` | Registra error, pendiente_manual o pendiente_test |
-| `get_tracker_summary` | Resumen con métricas del tracker |
-| `get_answers_bank` | Devuelve el banco de respuestas frecuentes |
-
-## Persistencia
-
-Se eligió JSON plano en `~/Documents/JobPilot/` en lugar de SQLite o electron-store porque:
-- Cero dependencias adicionales
-- Los archivos son directamente legibles e inspeccionables
-- Cowork puede leer/escribir los archivos de la carpeta `cowork/` directamente
-- Para el volumen de datos esperado (cientos de ofertas), el rendimiento es más que suficiente
-
-## Primer uso
-
-1. `npm install && npm run dev`
-2. La app carga datos de prueba automáticamente al primer arranque
-3. Revisá las 8 ofertas de ejemplo en **Ofertas**
-4. Configurá la carpeta de trabajo en **Settings**
-5. Explorá el flujo desde **Cowork Bridge**
-
-Para cargar datos de prueba manualmente: **Settings → Cargar datos de prueba**
+- Tests de contrato MCP para `get_profile` y `get_instructions`.
+- Tests de flujo completo de aprobacion y postulacion.
+- Tests UI para Perfil, Instrucciones, Conexion Cowork y Dashboard.
+- Documentacion de instalacion para usuarios no tecnicos.
+- Build distribuible firmado o instalador final.
+- Coverage configurado en Vitest.

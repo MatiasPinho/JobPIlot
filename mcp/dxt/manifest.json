@@ -3,7 +3,7 @@
   "name": "jobpilot",
   "display_name": "JobPilot",
   "version": "0.1.0",
-  "description": "Conecta Claude con tu base de datos de búsqueda laboral. Permite consultar ofertas, perfil, tracker y banco de respuestas directamente desde el chat.",
+  "description": "Conecta Claude con tu base de datos de búsqueda laboral. Permite consultar ofertas, perfil e instrucciones directamente desde el chat.",
   "author": {
     "name": "Matias Pinho"
   },
@@ -21,8 +21,7 @@
     { "name": "list_offers", "description": "Lista todas las ofertas, filtradas por estado si se especifica." },
     { "name": "mark_offer_applied", "description": "Marca una oferta como postulada y registra el resultado." },
     { "name": "register_error", "description": "Registra un error en una oferta (captcha, test técnico, error de carga)." },
-    { "name": "get_tracker_summary", "description": "Devuelve un resumen del tracker con métricas de la búsqueda laboral." },
-    { "name": "get_answers_bank", "description": "Devuelve el banco de respuestas frecuentes para formularios de postulación." }
+    { "name": "get_tracker_summary", "description": "Devuelve un resumen del tracker con métricas de la búsqueda laboral." }
   ],
   "keywords": ["jobpilot", "trabajo", "empleo", "mcp"],
   "license": "MIT"

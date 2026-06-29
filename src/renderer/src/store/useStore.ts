@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type {
   UserProfile,
-  FrequentAnswer,
   JobOffer,
   JobStatus,
   AppSettings,
@@ -23,7 +22,6 @@ interface AppState {
   // Data
   profile: UserProfile
   offers: JobOffer[]
-  answers: FrequentAnswer[]
   settings: AppSettings
 
   // UI
@@ -35,13 +33,13 @@ interface AppState {
   // Data setters (persist via IPC)
   setProfile: (profile: UserProfile) => Promise<void>
   setOffers: (offers: JobOffer[]) => Promise<void>
-  setAnswers: (answers: FrequentAnswer[]) => Promise<void>
   setSettings: (settings: AppSettings) => Promise<void>
 
   // Offer actions
   updateOffer: (id: string, updates: Partial<JobOffer>) => Promise<void>
   approveOffer: (id: string) => Promise<void>
   rejectOffer: (id: string) => Promise<void>
+  markOfferApplied: (id: string) => Promise<void>
   bulkApproveRecommended: () => Promise<void>
 
   // Import
@@ -70,7 +68,6 @@ async function persist<T>(key: string, data: T): Promise<void> {
   try {
     if (key === 'profile') await window.api.saveProfile(data as UserProfile)
     else if (key === 'offers') await window.api.saveOffers(data as JobOffer[])
-    else if (key === 'answers') await window.api.saveAnswers(data as FrequentAnswer[])
     else if (key === 'settings') await window.api.saveSettings(data as AppSettings)
   } catch (err) {
     console.error(`Error persisting ${key}:`, err)
@@ -80,7 +77,6 @@ async function persist<T>(key: string, data: T): Promise<void> {
 export const useStore = create<AppState>((set, get) => ({
   profile: DEFAULT_PROFILE,
   offers: [],
-  answers: [],
   settings: DEFAULT_SETTINGS,
   activeView: 'dashboard',
   loading: false,
@@ -95,11 +91,6 @@ export const useStore = create<AppState>((set, get) => ({
   setOffers: async (offers) => {
     set({ offers })
     await persist('offers', offers)
-  },
-
-  setAnswers: async (answers) => {
-    set({ answers })
-    await persist('answers', answers)
   },
 
   setSettings: async (settings) => {
@@ -121,6 +112,19 @@ export const useStore = create<AppState>((set, get) => ({
     await get().updateOffer(id, { status: 'rechazada' })
   },
 
+  markOfferApplied: async (id) => {
+    const offer = get().offers.find((o) => o.id === id)
+    if (!offer || offer.status === 'postulada' || offer.status === 'duplicada') return
+
+    await get().updateOffer(id, {
+      status: 'postulada',
+      appliedAt: new Date().toISOString(),
+      result: 'Marcada manualmente como postulada desde JobPilot',
+      nextAction: undefined
+    })
+    get().showNotification('success', `Postulación registrada: ${offer.title}`)
+  },
+
   bulkApproveRecommended: async () => {
     const { settings } = get()
     const offers = get().offers.map((o) =>
@@ -135,9 +139,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   importOffers: (raw) => {
-    const { profile, offers: existing, settings } = get()
-    const threshold = settings.scoreThresholdRecommended
-    const rejectThreshold = settings.scoreThresholdReject
+    const { profile, offers: existing } = get()
 
     const parsed: JobOffer[] = raw
       .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
@@ -163,7 +165,7 @@ export const useStore = create<AppState>((set, get) => ({
         const { score, positives, negatives } = scoreOffer(offer, profile)
         offer.score = score
         offer.scoreBreakdown = { positives, negatives }
-        offer.status = classifyByScore(score, threshold, rejectThreshold)
+        offer.status = classifyByScore(score)
         return offer
       })
 
@@ -230,20 +232,27 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadFromStorage: async () => {
     try {
-      const [profile, offers, answers, settings, helpRequests] = await Promise.all([
+      const [profile, offers, settings, helpRequests] = await Promise.all([
         window.api.getProfile(),
         window.api.getOffers(),
-        window.api.getAnswers(),
         window.api.getSettings(),
         window.api.getHelpRequests()
       ])
 
       const defaultFolder = await window.api.getDefaultWorkFolder()
 
+      const loadedProfile = {
+        ...DEFAULT_PROFILE,
+        ...(profile ?? {}),
+        personalInfo: {
+          ...DEFAULT_PROFILE.personalInfo,
+          ...(profile?.personalInfo ?? {})
+        }
+      }
+
       set({
-        profile: profile ?? DEFAULT_PROFILE,
+        profile: loadedProfile,
         offers: offers ?? [],
-        answers: answers ?? [],
         settings: { ...(settings ?? DEFAULT_SETTINGS), workFolder: settings?.workFolder || defaultFolder },
         helpRequests: helpRequests ?? []
       })

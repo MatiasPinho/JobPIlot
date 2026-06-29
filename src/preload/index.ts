@@ -6,8 +6,6 @@ const api: IElectronAPI = {
   saveProfile: (profile) => ipcRenderer.invoke('profile:save', profile),
   getOffers: () => ipcRenderer.invoke('offers:get'),
   saveOffers: (offers) => ipcRenderer.invoke('offers:save', offers),
-  getAnswers: () => ipcRenderer.invoke('answers:get'),
-  saveAnswers: (answers) => ipcRenderer.invoke('answers:save', answers),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
 

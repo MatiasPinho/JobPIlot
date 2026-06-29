@@ -3,7 +3,6 @@ import {
   User,
   Briefcase,
   ClipboardList,
-  MessageSquare,
   Plug,
   BookOpen,
   Settings
@@ -17,7 +16,6 @@ const NAV: { view: View; label: string; icon: React.ElementType }[] = [
   { view: 'profile',   label: 'Perfil',        icon: User },
   { view: 'offers',    label: 'Ofertas',        icon: Briefcase },
   { view: 'tracker',   label: 'Tracker',        icon: ClipboardList },
-  { view: 'answers',   label: 'Respuestas',     icon: MessageSquare },
   { view: 'bridge',        label: 'Conexión Cowork', icon: Plug },
   { view: 'instructions',  label: 'Instrucciones',   icon: BookOpen },
   { view: 'settings',      label: 'Settings',        icon: Settings },

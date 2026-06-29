@@ -5,23 +5,24 @@
 
 export interface SharedProfile {
   targetRole: string
+  personalInfo: {
+    dni: string
+    email: string
+    phone: string
+    address: string
+  }
   mainStack: string[]
   secondaryStack: string[]
   experience: string
+  softSkills: string[]
+  salaryExpectation: string
+  availability: string[]
   preferredModality: string[]
   preferredLocation: string[]
   avoid: string[]
   cvPath?: string
   cvText?: string
   updatedAt: string
-}
-
-export interface SharedAnswer {
-  id: string
-  question: string
-  answer: string
-  tags: string[]
-  createdAt: string
 }
 
 export interface SharedOffer {
@@ -42,7 +43,5 @@ export interface SharedOffer {
 
 export interface SharedSettings {
   workFolder: string
-  scoreThresholdRecommended: number
-  scoreThresholdReject: number
   portals: string[]
 }

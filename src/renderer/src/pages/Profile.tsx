@@ -11,16 +11,19 @@ function CvDropZone({ value, hasText, onChange }: {
 }) {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
   const inputRef                = useRef<HTMLInputElement>(null)
 
   const applyFile = useCallback(async (file: File) => {
     if (!file.name.endsWith('.pdf')) return
     const filePath = (file as File & { path?: string }).path
     setLoading(true)
+    setError(null)
     // Parsear el PDF para guardar el texto (lo usa Cowork para sacar logros/métricas)
     const res = await window.api.readPdfFromPath(filePath || file.name)
     setLoading(false)
     const path = filePath || file.name
+    if (!res.success) setError(res.error ?? 'No se pudo extraer texto del PDF')
     onChange(path, res.success ? res.text : undefined)
   }, [onChange])
 
@@ -58,7 +61,7 @@ function CvDropZone({ value, hasText, onChange }: {
           {value && <p className="text-2xs truncate mt-0.5" style={{ color: col.dim }}>{value}</p>}
           {value && (
             <p className="text-2xs mt-0.5" style={{ color: hasText ? col.green : col.amber }}>
-              {hasText ? '✓ Texto extraído (Cowork lo usa para la carta)' : '⚠ Sin texto extraído — volvé a cargarlo'}
+              {hasText ? '✓ Texto extraído (Cowork lo usa para la carta)' : `⚠ ${error ?? 'Sin texto extraído — volvé a cargarlo'}`}
             </p>
           )}
         </div>
@@ -170,16 +173,40 @@ function TagInput({
 
 export function Profile() {
   const profile          = useStore((s) => s.profile)
+  const settings         = useStore((s) => s.settings)
   const setProfile       = useStore((s) => s.setProfile)
+  const setSettings      = useStore((s) => s.setSettings)
   const showNotification = useStore((s) => s.showNotification)
 
   const [form, setForm] = useState<UserProfile>({ ...profile })
+  const [portals, setPortals] = useState<string[]>(settings.portals ?? [])
 
   const set = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
+  const setPersonalInfo = (key: keyof UserProfile['personalInfo'], value: string) =>
+    setForm((f) => ({
+      ...f,
+      personalInfo: {
+        ...(f.personalInfo ?? { dni: '', email: '', phone: '', address: '' }),
+        [key]: value
+      }
+    }))
+
   const save = async () => {
-    await setProfile({ ...form, updatedAt: new Date().toISOString() })
+    let next = { ...form }
+    if (next.cvPath && !next.cvText) {
+      const res = await window.api.readPdfFromPath(next.cvPath)
+      if (res.success && res.text) {
+        next = { ...next, cvText: res.text }
+        setForm(next)
+      } else {
+        showNotification('error', res.error ?? 'No se pudo extraer texto del CV')
+      }
+    }
+
+    await setProfile({ ...next, secondaryStack: [], updatedAt: new Date().toISOString() })
+    await setSettings({ ...settings, portals })
     showNotification('success', 'Perfil guardado')
   }
 
@@ -229,25 +256,94 @@ export function Profile() {
                 placeholder="Ej: 2+ años en desarrollo frontend con React y TypeScript"
               />
             </div>
+            <TagInput
+              label="Soft skills"
+              values={form.softSkills ?? []}
+              onChange={(v) => set('softSkills', v)}
+              variant="secondary"
+              placeholder="Trabajo en equipo, comunicación, adaptabilidad…"
+            />
+            <div>
+              <div className="label">Pretensión salarial</div>
+              <input
+                className="input"
+                value={form.salaryExpectation ?? ''}
+                onChange={(e) => set('salaryExpectation', e.target.value)}
+                placeholder="USD 2000 como mínimo"
+              />
+            </div>
+            <TagInput
+              label="Disponibilidad"
+              values={form.availability ?? []}
+              onChange={(v) => set('availability', v)}
+              variant="preference"
+              placeholder="Full-time, Part-time…"
+            />
+          </div>
+
+          {/* Personal info */}
+          <div
+            className="card flex flex-col gap-4"
+            style={{ boxShadow: `inset 3px 0 0 ${alpha(col.amber, 0.45)}` }}
+          >
+            <div className="flex items-center gap-1.5">
+              <ShieldAlert size={12} style={{ color: alpha(col.amber, 0.75) }} strokeWidth={2} />
+              <div className="section-label" style={{ marginBottom: 0, color: alpha(col.amber, 0.8) }}>
+                Datos personales
+              </div>
+            </div>
+            <p className="text-2xs" style={{ color: col.fgMuted, marginTop: '-0.75rem' }}>
+              Estos datos son sensibles. No es recomendable compartir DNI, telefono o direccion salvo que el portal lo pida de forma justificada.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="label">DNI</div>
+                <input
+                  className="input"
+                  value={form.personalInfo?.dni ?? ''}
+                  onChange={(e) => setPersonalInfo('dni', e.target.value)}
+                  placeholder="Ej: 12.345.678"
+                />
+              </div>
+              <div>
+                <div className="label">Email</div>
+                <input
+                  className="input"
+                  value={form.personalInfo?.email ?? ''}
+                  onChange={(e) => setPersonalInfo('email', e.target.value)}
+                  placeholder="tu@email.com"
+                />
+              </div>
+              <div>
+                <div className="label">Telefono</div>
+                <input
+                  className="input"
+                  value={form.personalInfo?.phone ?? ''}
+                  onChange={(e) => setPersonalInfo('phone', e.target.value)}
+                  placeholder="+54 9 11..."
+                />
+              </div>
+              <div>
+                <div className="label">Direccion</div>
+                <input
+                  className="input"
+                  value={form.personalInfo?.address ?? ''}
+                  onChange={(e) => setPersonalInfo('address', e.target.value)}
+                  placeholder="Ciudad o direccion completa"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Skills */}
           <div className="card flex flex-col gap-4 min-w-0">
             <div className="section-label" style={{ marginBottom: 0 }}>Habilidades</div>
             <TagInput
-              label="Stack principal"
+              label="Stack"
               values={form.mainStack}
               onChange={(v) => set('mainStack', v)}
               variant="primary"
-              placeholder="React, TypeScript, Node.js…"
-            />
-            <hr className="divider" />
-            <TagInput
-              label="Stack secundario"
-              values={form.secondaryStack}
-              onChange={(v) => set('secondaryStack', v)}
-              variant="secondary"
-              placeholder="Jest, Docker, SQL…"
+              placeholder="React, TypeScript, Angular, APIs REST…"
             />
           </div>
         </div>
@@ -268,7 +364,7 @@ export function Profile() {
               values={form.preferredModality}
               onChange={(v) => set('preferredModality', v)}
               variant="preference"
-              placeholder="Remoto, Híbrido, Full-time…"
+              placeholder="Remoto, Híbrido, Presencial…"
             />
             <hr className="divider" />
             <TagInput
@@ -277,6 +373,14 @@ export function Profile() {
               onChange={(v) => set('preferredLocation', v)}
               variant="preference"
               placeholder="CABA, AMBA, LATAM…"
+            />
+            <hr className="divider" />
+            <TagInput
+              label="Portales de búsqueda"
+              values={portals}
+              onChange={setPortals}
+              variant="preference"
+              placeholder="LinkedIn, GetOnBoard, Indeed…"
             />
           </div>
 

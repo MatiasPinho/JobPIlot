@@ -29,10 +29,6 @@ export function scoreOffer(offer: JobOffer, profile?: UserProfile): ScoreBreakdo
   for (const tech of profile.mainStack ?? []) if (hasTerm(text, tech)) { mainPts += 8; positives.push(tech) }
   score += Math.min(mainPts, 30)
 
-  let secPts = 0
-  for (const tech of profile.secondaryStack ?? []) if (hasTerm(text, tech)) { secPts += 3; positives.push(tech) }
-  score += Math.min(secPts, 12)
-
   if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) { score += 6; positives.push('modalidad') }
   if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) { score += 6; positives.push('ubicación') }
 
@@ -41,13 +37,12 @@ export function scoreOffer(offer: JobOffer, profile?: UserProfile): ScoreBreakdo
   return { score: Math.max(0, Math.min(100, Math.round(score))), positives, negatives }
 }
 
-export function classifyByScore(
-  score: number,
-  thresholdRecommended = 65,
-  thresholdReject = 35
-): Extract<JobStatus, 'recomendada' | 'detectada' | 'rechazada'> {
-  if (score >= thresholdRecommended) return 'recomendada'
-  if (score >= thresholdReject) return 'detectada'
+const RECOMMENDED_SCORE = 65
+const DETECTED_SCORE = 35
+
+export function classifyByScore(score: number): Extract<JobStatus, 'recomendada' | 'detectada' | 'rechazada'> {
+  if (score >= RECOMMENDED_SCORE) return 'recomendada'
+  if (score >= DETECTED_SCORE) return 'detectada'
   return 'rechazada'
 }
 

@@ -2,13 +2,12 @@
  * Mock implementation of window.api for browser-only preview mode.
  * Only active when running outside Electron (no contextBridge available).
  */
-import type { ElectronAPI, UserProfile, JobOffer, FrequentAnswer, AppSettings, HelpRequest } from '../types'
+import type { ElectronAPI, UserProfile, JobOffer, AppSettings, HelpRequest } from '../types'
 import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from './mockData'
 
 const store = {
   profile: DEFAULT_PROFILE as UserProfile,
   offers: [] as JobOffer[],
-  answers: [] as FrequentAnswer[],
   settings: DEFAULT_SETTINGS as AppSettings,
   prompts: { searchInstructions: null, applicationInstructions: null, searchMessage: null, applicationMessage: null },
   help: [] as HelpRequest[]
@@ -19,8 +18,6 @@ export const mockApi: ElectronAPI = {
   saveProfile: async (p) => { store.profile = p },
   getOffers: async () => store.offers,
   saveOffers: async (o) => { store.offers = o },
-  getAnswers: async () => store.answers,
-  saveAnswers: async (a) => { store.answers = a },
   getSettings: async () => store.settings,
   saveSettings: async (s) => { store.settings = s },
 

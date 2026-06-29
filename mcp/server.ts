@@ -56,6 +56,11 @@ interface RawOffer {
 }
 
 interface Profile {
+  targetRole?: string
+  experience?: string
+  softSkills?: string[]
+  salaryExpectation?: string
+  availability?: string[]
   mainStack?: string[]
   secondaryStack?: string[]
   avoid?: string[]
@@ -67,25 +72,134 @@ interface Settings {
   portals?: string[]
 }
 
-// Los portales SIEMPRE salen de Settings, aunque las instrucciones estén editadas.
-function injectPortals(text: string, settings: Settings | null): string {
-  const portalLine = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
-  if (/## PORTALES A BUSCAR\n/.test(text)) {
-    return text.replace(/(## PORTALES A BUSCAR\n)[\s\S]*?(\n\n)/, `$1${portalLine}$2`)
-  }
-  return `## PORTALES A BUSCAR\n${portalLine}\n\n${text}`
+function listOrFallback(values: string[] | undefined, fallback: string): string {
+  return values?.length ? values.join(', ') : fallback
+}
+
+function portalText(settings: Settings | null): string {
+  return settings?.portals?.length ? settings.portals.join(', ') : '{portal_url}'
+}
+
+const DEFAULT_AVOID = [
+  'MLM',
+  'Ventas a comisión pura sin sueldo base',
+  'Inversión inicial',
+  'Reviews negativos visibles',
+  'Zona muy alejada no remota',
+  'Inglés superior a B1',
+  'Senior',
+  'G&L GROUP'
+]
+
+function applyInstructionVariables(text: string, profile: Profile | null, settings: Settings | null): string {
+  const portal = portalText(settings)
+  const role = profile?.targetRole || 'Frontend Developer / React Developer / Angular Developer / TypeScript Developer'
+  return text
+    .replaceAll('{portal_url}', portal)
+    .replaceAll('{portal}', portal)
+    .replaceAll('{rol}', role)
+    .replaceAll('{role}', role)
+    .replaceAll('{target_role}', role)
 }
 
 function buildSearchInstructions(profile: Profile | null, settings: Settings | null): string {
-  const portals = settings?.portals?.length ? settings.portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
-  const avoidList = (profile?.avoid ?? []).length
-    ? (profile!.avoid!).map((a) => `- ${a}`).join('\n')
-    : '- (ninguno configurado)'
-  return `## PORTALES A BUSCAR\n${portals}\n\n## CRITERIOS DE FILTRO\nPriorizá ofertas que cumplan al menos 3 de:\n- Empresa con buena reputación (4+ estrellas)\n- Salario igual o mayor a la pretensión del perfil\n- Modalidad que coincida con las preferencias del perfil\n- Ubicación dentro de la zona indicada en el perfil o remoto\n- Beneficios mencionados\n\nDESCARTÁ siempre:\n- MLM, ventas a comisión pura sin sueldo base\n- Inversión inicial\n- Reviews negativos visibles\n- Inglés superior a B1\n- SENIOR (5+ años obligatorio)\n- Exclusiones del perfil:\n${avoidList}\n\n## PLAN\n1. get_profile\n2. Verificar Claude in Chrome y sesión en portal\n3. Buscar con keywords del perfil (máximo 2 en paralelo, no más)\n4. Por cada oferta de los resultados: ANTES de abrirla, add_offer con título/empresa/link. Si "ya existe", saltala sin abrir. Si es nueva, abrí y completá datos.\n5. STOP — reportar cuántas guardaste, esperar aprobación del usuario en JobPilot\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (búsqueda, navegación, abrir oferta). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules en esta fase\n- No reveles info personal fuera del portal\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
+  const portal = portalText(settings)
+  const targetRole = profile?.targetRole || 'Frontend Developer / React Developer / Angular Developer / TypeScript Developer'
+  const experience = profile?.experience || 'Frontend Developer con 2+ años de experiencia construyendo aplicaciones web con React, TypeScript y Angular en entornos enterprise, gubernamentales y freelance.'
+  const skills = listOrFallback(profile?.mainStack, 'React, TypeScript, Angular, APIs REST, Jest / React Testing Library')
+  const softSkills = listOrFallback(profile?.softSkills, 'Trabajo en equipo, comunicación con clientes y equipos técnicos, adaptabilidad')
+  const salaryExpectation = profile?.salaryExpectation || 'USD 2000 como mínimo'
+  const modality = listOrFallback(profile?.preferredModality, 'híbrida (solo si es en Buenos Aires) / remota')
+  const availability = listOrFallback(profile?.availability, 'full-time')
+  const location = listOrFallback(profile?.preferredLocation, 'Buenos Aires, Argentina')
+  const avoid = (profile?.avoid ?? []).length ? profile!.avoid! : DEFAULT_AVOID
+  const avoidLines = avoid.map((item) => `- ${item}`).join('\n')
+
+  return `## ROL Y OBJETIVO
+
+Sos un agente de búsqueda de empleo. Tu tarea es ingresar a ${portal}, buscar
+ofertas laborales compatibles con mi perfil, priorizarlas según criterios
+específicos y enviar postulaciones en mi nombre. Actuá con precisión,
+sin saltearte pasos, y reportá cada acción realizada.
+
+## MI PERFIL
+
+- **Rol objetivo**: ${targetRole}
+- **Experiencia laboral**: ${experience}
+- **Competencias clave**: ${skills}
+- **Soft skills**: ${softSkills}
+- **Pretensión salarial**: ${salaryExpectation}
+- **Modalidad preferida**: ${modality}
+- **Disponibilidad**: ${availability}
+- **Zona de residencia**: ${location}
+
+## CRITERIOS DE FILTRO
+
+Priorizá ofertas que cumplan al menos 3 de:
+- Empresa con buena reputación (4+ estrellas)
+- Salario igual o mayor a mi pretensión (o "no publicado" si el rol matchea)
+- Modalidad que coincida
+- Ubicación dentro de mi zona o remoto
+- Beneficios mencionados
+
+DESCARTÁ ofertas que:
+${avoidLines}
+
+## PLAN DE TAREAS
+
+Ejecutá en orden:
+
+1. **Verificar acceso y sesión**: confirmá que la extensión Claude in Chrome
+   está activa. Verificá login en ${portal}.
+
+2. **Buscar ofertas**: ingresá búsquedas en paralelo (hasta 4 simultáneas)
+   usando keywords del rol. Ejemplo si soy "Asesor Comercial":
+   "Asesor Comercial", "Ejecutivo de Ventas", "Vendedor B2B", "Account Manager".
+
+3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
+   evaluá según mis criterios. Asigná score 1-10.
+
+4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
+   Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
+   Mostrame y esperá mi confirmación.
+
+5. **Esperar instrucción**:
+   - "confirmar todos" → postular en orden
+   - "omitir X" → postular solo las confirmadas
+   - "editar X" → te indico cambios
+
+## REGLAS DURAS
+
+- NUNCA postular sin confirmación humana en paso 4
+- NUNCA cartas genéricas, siempre personalizadas
+- Si falla 2 veces, salteala y registrala como error
+- Si pide test técnico antes de postular, marcala como "pendiente test"
+- NUNCA reveles info personal a terceros fuera del portal
+- NO postules a G&L GROUP`
 }
 
 function buildApplicationInstructions(): string {
-  return `## PLAN\n1. get_profile — datos del usuario y ruta del CV\n2. get_answers_bank — banco de respuestas frecuentes\n3. list_approved_offers — ofertas aprobadas por el usuario\n4. Por cada oferta aprobada:\n   - Abrir link con Claude in Chrome\n   - ¿Pide carta de presentación / cover letter / mensaje al reclutador? SÍ: NO la escribas, llamá a request_cover_letter (company, role, offerId, link), la oferta queda pendiente y la escribe el usuario, pasá a la siguiente. NO: seguí.\n   - Adjuntar CV desde cvPath del perfil\n   - Completar formularios con banco de respuestas\n   - Enviar (solo si no quedó pendiente por carta)\n   - Registrar: mark_offer_applied / register_error (error / pendiente_test / pendiente_manual)\n5. get_tracker_summary — resumen final, incluí cuántas quedaron esperando carta del usuario\n\n## CARTAS DE PRESENTACIÓN\nNO escribís cartas. Las escribe el usuario (tiene una skill dedicada). Cuando una oferta requiera carta, usá request_cover_letter y seguí. Nunca improvises una carta.\n\n## REGLAS\n- RITMO HUMANO: esperá entre 3 y 5 segundos entre cada acción (abrir oferta, completar campo, navegar). No hagas acciones en ráfaga — reduce CAPTCHAs y límites de velocidad.\n- NUNCA postules sin aprobación en JobPilot\n- NUNCA cartas genéricas\n- Cuenta nueva en portal → pendiente_manual\n- BLOQUEOS: ante CAPTCHA, verificación de robot, 2FA o muro que requiera un humano, NO intentes resolverlo. Llamá a request_human_help con el motivo y la URL, pausá y esperá a que el usuario lo resuelva.`
+  return `## PLAN DE TAREAS
+
+Ejecutá en orden:
+
+6. **Postular**: por cada oferta confirmada o aprobada en JobPilot:
+   - Adjuntá mi CV PDF desde cvPath
+   - Carta personalizada: esperá a que yo te la envíe o te pase el mensaje de por qué quiero entrar a esta empresa, por qué este rol, y un logro específico relevante
+   - Enviá postulación
+   - Confirmá éxito
+
+7. **Reportá**: resumen final con total postuladas, confirmadas, errores,
+   y top 3 mejor match para seguimiento LinkedIn manual.
+
+## REGLAS DURAS
+
+- NUNCA postular sin confirmación humana en paso 4 o aprobación explícita en JobPilot
+- NUNCA uses cartas genéricas, siempre personalizadas por empresa y rol
+- Si falla 2 veces, salteala y registrala como error
+- Si pide test técnico antes de postular, marcala como "pendiente test"
+- NUNCA reveles info personal a terceros fuera del portal
+- NO postules a G&L GROUP`
 }
 
 // Busca un término como palabra completa (evita que "react" matchee "reaction").
@@ -114,10 +228,6 @@ function scoreOffer(offer: RawOffer, profile: Profile | null): ScoreResult {
   for (const tech of profile.mainStack ?? []) if (hasTerm(text, tech)) { mainPts += 8; positives.push(tech) }
   score += Math.min(mainPts, 30)
 
-  let secPts = 0
-  for (const tech of profile.secondaryStack ?? []) if (hasTerm(text, tech)) { secPts += 3; positives.push(tech) }
-  score += Math.min(secPts, 12)
-
   if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) { score += 6; positives.push('modalidad') }
   if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) { score += 6; positives.push('ubicación') }
 
@@ -128,7 +238,7 @@ function scoreOffer(offer: RawOffer, profile: Profile | null): ScoreResult {
 
 function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unknown> {
   const { score, positives, negatives } = scoreOffer(raw, profile)
-  const status = score >= 65 ? 'recomendada' : score <= 20 ? 'rechazada' : 'detectada'
+  const status = score >= 65 ? 'recomendada' : score < 35 ? 'rechazada' : 'detectada'
   return {
     id: `cowork-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title: raw.title ?? 'Sin título',
@@ -248,11 +358,6 @@ const TOOLS = [
   {
     name: 'get_tracker_summary',
     description: 'Devuelve un resumen del tracker con métricas de la búsqueda laboral.',
-    inputSchema: { type: 'object', properties: {}, required: [] }
-  },
-  {
-    name: 'get_answers_bank',
-    description: 'Devuelve el banco de respuestas frecuentes para usar en formularios de postulación.',
     inputSchema: { type: 'object', properties: {}, required: [] }
   },
   {
@@ -460,24 +565,15 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
       case 'get_instructions': {
         const { mode } = args as { mode: 'busqueda' | 'postulacion' }
-        const prompts  = readJson<{ searchInstructions?: string; applicationInstructions?: string }>(join(DATA_DIR, 'prompts.json'), {})
+        const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
         let text: string
         if (mode === 'busqueda') {
           const settings = readJson<Settings | null>(join(DATA_DIR, 'settings.json'), null)
-          const base = prompts.searchInstructions ?? buildSearchInstructions(
-            readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null),
-            settings
-          )
-          text = injectPortals(base, settings)
+          text = applyInstructionVariables(buildSearchInstructions(profile, settings), profile, settings)
         } else {
-          text = prompts.applicationInstructions ?? buildApplicationInstructions()
+          text = applyInstructionVariables(buildApplicationInstructions(), profile, null)
         }
         return { content: [{ type: 'text', text }] }
-      }
-
-      case 'get_answers_bank': {
-        const answers = readJson(join(DATA_DIR, 'answers.json'), [])
-        return { content: [{ type: 'text', text: JSON.stringify(answers, null, 2) }] }
       }
 
       case 'add_offer': {
