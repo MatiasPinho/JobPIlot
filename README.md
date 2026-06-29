@@ -38,6 +38,28 @@ npm run mcp:http
 
 `npm run test -- --coverage` requiere instalar/configurar `@vitest/coverage-v8`.
 
+## Requisitos externos
+
+Para desarrollo local hace falta:
+
+- Node.js y npm.
+- Claude Cowork con capacidad de conectar MCP HTTP.
+- `cloudflared` si Cowork necesita acceder al MCP desde una URL publica.
+
+JobPilot levanta el MCP local en `http://localhost:3005/mcp`. Para exponerlo a Cowork usa Cloudflare Tunnel:
+
+```bash
+cloudflared tunnel --url http://localhost:3005
+```
+
+La app intenta encontrar `cloudflared` en:
+
+- La instalacion de WinGet de Windows:
+  `~/AppData/Local/Microsoft/WinGet/Packages/Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe/cloudflared.exe`
+- El `PATH` del sistema como `cloudflared`.
+
+Si `cloudflared` no esta instalado, el boton Cloudflare Tunnel puede fallar o no devolver URL. Ver detalles en [docs/cloudflared-tunnel.md](docs/cloudflared-tunnel.md).
+
 ## Datos locales
 
 JobPilot persiste datos en:
