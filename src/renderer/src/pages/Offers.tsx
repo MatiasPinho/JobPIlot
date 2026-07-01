@@ -40,6 +40,7 @@ function OfferCard({ offer }: { offer: JobOffer }) {
   const canApprove = ['recomendada', 'detectada'].includes(offer.status)
   const canReject  = ['recomendada', 'detectada', 'aprobada', 'pendiente_manual'].includes(offer.status)
   const canMarkApplied = !['postulada', 'duplicada'].includes(offer.status)
+  const canRestore = offer.status === 'rechazada'
 
   return (
     <div
@@ -199,6 +200,12 @@ function OfferCard({ offer }: { offer: JobOffer }) {
               <button className="btn-secondary" style={{ minHeight: 28, padding: '0 0.75rem', fontSize: 'var(--text-2xs)' }}
                 onClick={() => updateOffer(offer.id, { status: 'recomendada' })}>
                 Desaprobar
+              </button>
+            )}
+            {canRestore && (
+              <button className="btn-secondary" style={{ minHeight: 28, padding: '0 0.75rem', fontSize: 'var(--text-2xs)' }}
+                onClick={() => updateOffer(offer.id, { status: 'detectada' })}>
+                Restaurar a revisión
               </button>
             )}
             {canMarkApplied && (

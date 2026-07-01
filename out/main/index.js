@@ -4,7 +4,7 @@ const path = require("path");
 const os = require("os");
 const fs = require("fs");
 const child_process = require("child_process");
-const pdfParse = require("pdf-parse");
+const { PDFParse } = require("pdf-parse");
 let mcpProcess = null;
 let tunnelProcess = null;
 let tunnelUrl = null;
@@ -73,13 +73,24 @@ function readJson(file, fallback) {
 function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
 }
+async function readPdfText(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const data = await parser.getText();
+    return {
+      text: data.text,
+      filename: filePath.split(/[/\\]/).pop() ?? "archivo.pdf"
+    };
+  } finally {
+    await parser.destroy();
+  }
+}
 function registerIpcHandlers() {
   electron.ipcMain.handle("profile:get", () => readJson(path.join(DATA_DIR, "profile.json"), null));
   electron.ipcMain.handle("profile:save", (_e, profile) => writeJson(path.join(DATA_DIR, "profile.json"), profile));
   electron.ipcMain.handle("offers:get", () => readJson(path.join(DATA_DIR, "offers.json"), []));
   electron.ipcMain.handle("offers:save", (_e, offers) => writeJson(path.join(DATA_DIR, "offers.json"), offers));
-  electron.ipcMain.handle("answers:get", () => readJson(path.join(DATA_DIR, "answers.json"), []));
-  electron.ipcMain.handle("answers:save", (_e, answers) => writeJson(path.join(DATA_DIR, "answers.json"), answers));
   electron.ipcMain.handle("settings:get", () => readJson(path.join(DATA_DIR, "settings.json"), null));
   electron.ipcMain.handle("settings:save", (_e, settings) => writeJson(path.join(DATA_DIR, "settings.json"), settings));
   electron.ipcMain.handle("bridge:get-default-folder", () => COWORK_DIR);
@@ -103,20 +114,16 @@ function registerIpcHandlers() {
     if (result.canceled || result.filePaths.length === 0) return { success: false, error: "Cancelado" };
     const filePath = result.filePaths[0];
     try {
-      const buffer = fs.readFileSync(filePath);
-      const data = await pdfParse(buffer);
-      const filename = filePath.split(/[/\\]/).pop() ?? "archivo.pdf";
-      return { success: true, text: data.text, filename };
+      const data = await readPdfText(filePath);
+      return { success: true, text: data.text, filename: data.filename };
     } catch (err) {
       return { success: false, error: `Error leyendo PDF: ${String(err)}` };
     }
   });
   electron.ipcMain.handle("pdf:read-path", async (_e, filePath) => {
     try {
-      const buffer = fs.readFileSync(filePath);
-      const data = await pdfParse(buffer);
-      const filename = filePath.split(/[/\\]/).pop() ?? "archivo.pdf";
-      return { success: true, text: data.text, filename };
+      const data = await readPdfText(filePath);
+      return { success: true, text: data.text, filename: data.filename };
     } catch (err) {
       return { success: false, error: `Error leyendo PDF: ${String(err)}` };
     }
@@ -129,6 +136,28 @@ function registerIpcHandlers() {
     const list = readJson(file, []);
     const next = id ? list.map((h) => h.id === id ? { ...h, resolved: true } : h) : list.map((h) => ({ ...h, resolved: true }));
     writeJson(file, next);
+    return { ok: true };
+  });
+  const BACKUP_FILES = ["profile", "offers", "settings", "prompts"];
+  electron.ipcMain.handle("data:export", async (e) => {
+    const win = electron.BrowserWindow.fromWebContents(e.sender);
+    const res = await electron.dialog.showSaveDialog(win, {
+      defaultPath: `jobpilot-backup-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+    if (res.canceled || !res.filePath) return { ok: false };
+    const bundle = { _jobpilot: 1, exportedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    for (const f of BACKUP_FILES) bundle[f] = readJson(path.join(DATA_DIR, `${f}.json`), null);
+    writeJson(res.filePath, bundle);
+    return { ok: true, path: res.filePath };
+  });
+  electron.ipcMain.handle("data:import", async (e) => {
+    const win = electron.BrowserWindow.fromWebContents(e.sender);
+    const res = await electron.dialog.showOpenDialog(win, { properties: ["openFile"], filters: [{ name: "JSON", extensions: ["json"] }] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false };
+    const bundle = readJson(res.filePaths[0], null);
+    if (!bundle || bundle._jobpilot !== 1) return { ok: false, error: "No es un backup de JobPilot." };
+    for (const f of BACKUP_FILES) if (bundle[f] != null) writeJson(path.join(DATA_DIR, `${f}.json`), bundle[f]);
     return { ok: true };
   });
   electron.ipcMain.handle("server:status", () => ({

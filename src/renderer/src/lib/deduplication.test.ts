@@ -41,6 +41,36 @@ describe('detectDuplicates', () => {
     expect(result.duplicates[0].duplicateOf).toBe('original')
   })
 
+  it('no marca como duplicadas ofertas distintas de Indeed que comparten /viewjob', () => {
+    const existing = [
+      makeOffer({
+        id: 'talent-connect',
+        link: 'https://ar.indeed.com/viewjob?jk=8951e6d6778af00d',
+        title: 'Frontend Developer SSR',
+        company: 'Talent Connect'
+      })
+    ]
+    const incoming = [
+      makeOffer({
+        id: 'belo',
+        link: 'https://ar.indeed.com/viewjob?jk=02c09ea0bd85821b',
+        title: 'SSR Full Stack Developer',
+        company: 'belo'
+      }),
+      makeOffer({
+        id: 'web',
+        link: 'https://ar.indeed.com/viewjob?jk=48c58b7b0ceadac6',
+        title: 'Desarrollador Fullstack SSR',
+        company: 'Web:'
+      })
+    ]
+
+    const result = detectDuplicates(incoming, existing)
+
+    expect(result.unique.map((offer) => offer.id)).toEqual(['belo', 'web'])
+    expect(result.duplicates).toHaveLength(0)
+  })
+
   it('mantiene ofertas distintas como unicas', () => {
     const existing = [makeOffer({ id: 'original', company: 'ACME', title: 'Frontend Developer' })]
     const incoming = [makeOffer({ id: 'new', company: 'Globant', title: 'Angular Developer', link: 'https://jobs.com/angular' })]
