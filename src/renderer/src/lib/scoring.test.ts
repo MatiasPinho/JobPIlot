@@ -133,10 +133,11 @@ describe('scoreOffer', () => {
 })
 
 describe('classifyByScore', () => {
-  it('clasifica correctamente segun umbrales fijos', () => {
+  it('solo recomienda automaticamente; el resto queda para revision', () => {
     expect(classifyByScore(65)).toBe('recomendada')
     expect(classifyByScore(64)).toBe('detectada')
     expect(classifyByScore(35)).toBe('detectada')
-    expect(classifyByScore(34)).toBe('rechazada')
+    expect(classifyByScore(34)).toBe('detectada')
+    expect(classifyByScore(0)).toBe('detectada')
   })
 })

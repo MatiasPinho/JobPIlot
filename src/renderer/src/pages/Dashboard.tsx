@@ -235,17 +235,47 @@ function PortalPanel({ offers }: { offers: JobOffer[] }) {
       {rows.length === 0 ? (
         <p className="text-2xs" style={{ color: col.fgMuted }}>Sin ofertas cargadas.</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {rows.map(([portal, data]) => (
-            <div key={portal} className="grid grid-cols-[1fr_42px_42px_42px] items-center gap-2">
-              <span className="text-xs truncate font-medium" style={{ color: col.fg }}>{portal}</span>
-              <span className="text-2xs text-right tabular-nums" style={{ color: col.fgMuted }}>{data.total} total</span>
-              <span className="text-2xs text-right tabular-nums" style={{ color: col.violet }}>{data.applied} post.</span>
-              <span className="text-2xs text-right tabular-nums font-bold" style={{ color: scoreColor(data.avg) }}>{data.avg}</span>
+            <div
+              key={portal}
+              className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2"
+              style={{ background: alpha(col.raised, 0.34), border: `1px solid ${alpha(col.border, 0.14)}` }}
+            >
+              <div className="min-w-0">
+                <div className="text-xs truncate font-semibold" style={{ color: col.fg }}>{portal}</div>
+                <div className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>
+                  {data.applied > 0 ? `${data.applied} postuladas` : 'Sin postulaciones'}
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <MetricPill label="total" value={data.total} color={col.fgMuted} />
+                <MetricPill label="post." value={data.applied} color={col.violet} />
+                <MetricPill label="score" value={data.avg} color={scoreColor(data.avg)} strong />
+              </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function MetricPill({ label, value, color, strong = false }: {
+  label: string
+  value: number
+  color: string
+  strong?: boolean
+}) {
+  return (
+    <div
+      className="h-9 min-w-[46px] rounded-md px-2 flex flex-col items-center justify-center"
+      style={{ background: alpha(color, strong ? 0.12 : 0.07), border: `1px solid ${alpha(color, strong ? 0.28 : 0.16)}` }}
+    >
+      <span className="text-xs leading-none tabular-nums font-bold" style={{ color }}>{value}</span>
+      <span className="text-[9px] leading-none mt-1 uppercase" style={{ color: alpha(color, 0.82), letterSpacing: 0 }}>
+        {label}
+      </span>
     </div>
   )
 }

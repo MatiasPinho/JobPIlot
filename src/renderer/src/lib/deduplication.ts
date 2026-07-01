@@ -3,9 +3,17 @@ import type { JobOffer } from '../types'
 function normalizeUrl(url: string): string {
   try {
     const u = new URL(url)
+    const host = u.hostname.toLowerCase().replace(/^www\./, '')
+    const path = u.pathname.toLowerCase().replace(/\/$/, '')
+    const indeedId = u.searchParams.get('jk')
+    if (host.includes('indeed.') && indeedId) return `${host}/viewjob?jk=${indeedId.toLowerCase()}`
+    const linkedInId = u.searchParams.get('currentJobId') ?? u.searchParams.get('jobId')
+    if (host.includes('linkedin.') && linkedInId) return `${host}/jobs/view/${linkedInId.toLowerCase()}`
+    const linkedInPathId = path.match(/\/jobs\/view\/(\d+)/)?.[1]
+    if (host.includes('linkedin.') && linkedInPathId) return `${host}/jobs/view/${linkedInPathId}`
     u.search = ''
     u.hash = ''
-    return u.toString().toLowerCase().replace(/\/$/, '')
+    return `${host}${u.pathname.toLowerCase().replace(/\/$/, '')}`
   } catch {
     return url.toLowerCase().trim()
   }

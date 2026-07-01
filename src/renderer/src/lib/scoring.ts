@@ -38,12 +38,10 @@ export function scoreOffer(offer: JobOffer, profile?: UserProfile): ScoreBreakdo
 }
 
 const RECOMMENDED_SCORE = 65
-const DETECTED_SCORE = 35
 
-export function classifyByScore(score: number): Extract<JobStatus, 'recomendada' | 'detectada' | 'rechazada'> {
+export function classifyByScore(score: number): Extract<JobStatus, 'recomendada' | 'detectada'> {
   if (score >= RECOMMENDED_SCORE) return 'recomendada'
-  if (score >= DETECTED_SCORE) return 'detectada'
-  return 'rechazada'
+  return 'detectada'
 }
 
 export function scoreColor(score: number): string {

@@ -155,13 +155,34 @@ Ejecutá en orden:
 2. **Buscar ofertas**: ingresá búsquedas en paralelo (hasta 4 simultáneas)
    usando keywords del rol. Ejemplo si soy "Asesor Comercial":
    "Asesor Comercial", "Ejecutivo de Ventas", "Vendedor B2B", "Account Manager".
+   Abrí varias búsquedas, pero navegá los resultados con ritmo humano: no abras muchas ofertas o páginas en ráfaga.
+
+   Cobertura obligatoria:
+   - Armá la estrategia de búsqueda desde el perfil completo: rol objetivo, stack, seniority/experiencia, modalidad y ubicación.
+   - A partir de esas palabras clave, generá variantes adicionales en español e inglés: sinónimos, títulos equivalentes, combinaciones con tecnologías del stack y términos de seniority. No te limites a las keywords literales cargadas.
+   - Separá mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (títulos equivalentes o tecnologías cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
+   - Priorizá cobertura sobre velocidad. No te quedes solo con la primera página: intentá revisar al menos 3 páginas por búsqueda o 60-100 resultados totales por portal, salvo que se agoten resultados relevantes o el portal bloquee.
+   - No estás obligado a encontrar una cantidad mínima de ofertas compatibles. Sí estás obligado a revisar suficiente mercado antes de concluir. Si encontrás menos de 10 compatibles, ampliá la búsqueda con más variantes, más páginas, otros portales configurados en JobPilot o filtros menos restrictivos del portal que no contradigan el perfil (por ejemplo fecha, orden, radio o seniority automático). Si hay un solo portal configurado, ampliá solo dentro de ese portal. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
+   - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si después de ampliar hay menos de 10 compatibles, presentá las que haya y explicá la cobertura realizada.
+   - Avanzá lento para evitar rate limit: esperá entre 6 y 12 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera.
+   - No abras más de 2 ofertas del mismo portal al mismo tiempo. Si hay señales de bloqueo, pasá inmediatamente a navegación secuencial.
+   - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto.
+   - No uses filtros más restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qué y hagas también una búsqueda amplia.
+   - En LinkedIn, revisá tanto búsquedas por keywords como la feed personalizada /jobs/search-results/ cuando esté disponible.
+   - Buscá variantes en inglés y español derivadas del rol objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otro rol, adaptá las variantes a ese rol.
+   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste para que el usuario pueda auditar la búsqueda.
+   - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Informá exactamente páginas/resultados revisados, qué quedó sin revisar y llamá a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
 
 3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
    evaluá según mis criterios. Asigná score 1-10.
+   - No incluyas en el top ofertas que violen un descarte duro. Si son interesantes pero incumplen, listalas aparte como "descartadas".
+   - Si una oferta pide inglés Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique explícitamente que acepta ese nivel.
+   - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
 
 4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
    Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
    Mostrame y esperá mi confirmación.
+   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas válidas, descartadas y pendientes por bloqueo.
 
 5. **Esperar instrucción**:
    - "confirmar todos" → postular en orden
@@ -171,10 +192,12 @@ Ejecutá en orden:
 ## REGLAS DURAS
 
 - NUNCA postular sin confirmación humana en paso 4
+- En modo búsqueda, no prometas postular ni tomes "confirmar todos" como aprobación de postulación. La confirmación solo sirve para guardar o revisar ofertas; postular ocurre después, en modo postulación y con aprobación en JobPilot.
 - NUNCA cartas genéricas, siempre personalizadas
 - Si falla 2 veces, salteala y registrala como error
 - Si pide test técnico antes de postular, marcala como "pendiente test"
 - NUNCA reveles info personal a terceros fuera del portal
+- Ante CAPTCHA, verificación humana, rate limit persistente, login o 2FA, llamá a request_human_help con motivo y URL, pausá y esperá al usuario.
 - NO postules a G&L GROUP`
 }
 
@@ -238,7 +261,7 @@ function scoreOffer(offer: RawOffer, profile: Profile | null): ScoreResult {
 
 function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unknown> {
   const { score, positives, negatives } = scoreOffer(raw, profile)
-  const status = score >= 65 ? 'recomendada' : score < 35 ? 'rechazada' : 'detectada'
+  const status = score >= 65 ? 'recomendada' : 'detectada'
   return {
     id: `cowork-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title: raw.title ?? 'Sin título',
@@ -259,7 +282,20 @@ function buildOffer(raw: RawOffer, profile: Profile | null): Record<string, unkn
 
 // ponytail: dedup por link normalizado, fallback título+empresa
 function normLink(s: string): string {
-  return String(s).toLowerCase().split('?')[0].replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+  try {
+    const u = new URL(String(s))
+    const host = u.hostname.toLowerCase().replace(/^www\./, '')
+    const path = u.pathname.toLowerCase().replace(/\/$/, '')
+    const indeedId = u.searchParams.get('jk')
+    if (host.includes('indeed.') && indeedId) return `${host}/viewjob?jk=${indeedId.toLowerCase()}`
+    const linkedInId = u.searchParams.get('currentJobId') ?? u.searchParams.get('jobId')
+    if (host.includes('linkedin.') && linkedInId) return `${host}/jobs/view/${linkedInId.toLowerCase()}`
+    const linkedInPathId = path.match(/\/jobs\/view\/(\d+)/)?.[1]
+    if (host.includes('linkedin.') && linkedInPathId) return `${host}/jobs/view/${linkedInPathId}`
+    return `${host}${path}`
+  } catch {
+    return String(s).toLowerCase().split('?')[0].replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+  }
 }
 function findDup(offers: Array<Record<string, unknown>>, raw: RawOffer): Record<string, unknown> | undefined {
   const link = (raw.link ?? '').trim()
