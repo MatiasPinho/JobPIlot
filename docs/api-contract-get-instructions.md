@@ -81,8 +81,11 @@ Incluye:
 - regla de presentar top 10 y esperar confirmacion
 - regla de no postular
 - regla de guardar en JobPilot solo ofertas compatibles o dudosas, no descartes duros
-- minimo de cobertura: 80-120 tarjetas/resultados por portal y 40-60 avisos abiertos/leidos cuando haya volumen disponible
-- regla de no declarar saturacion antes de 5 queries, 100 resultados totales y 3 paginas por keyword principal, salvo bloqueo o ausencia real de resultados
+- busqueda en dos fases: barrido de listados (solo tarjetas, 8-10 queries, 3+ paginas por query) y luego lectura de detalle solo de candidatas
+- objetivo de guardado: ~50 ofertas (compatibles + dudosas) si hay volumen; ante la duda se guarda como dudosa en vez de descartar
+- descripcion en ingles no es descarte por si sola; solo descarta si el aviso exige nivel de ingles superior al perfil
+- avisos que no cargan tras 2 reintentos se guardan como dudosas con los datos de la tarjeta
+- regla de no declarar saturacion hasta correr todas las queries planificadas con sus 3+ paginas y que las ultimas 2 queries aporten <10% de ofertas nuevas; el costo de la sesion nunca es motivo de corte
 
 No incluye:
 
