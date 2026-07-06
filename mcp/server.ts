@@ -189,43 +189,49 @@ Ejecutá en orden:
 1. **Verificar acceso y sesión**: confirmá que la extensión Claude in Chrome
    está activa. Verificá login en ${portal}.
 
-2. **Buscar ofertas**: ingresá búsquedas en paralelo (hasta 4 simultáneas)
-   usando keywords del rol. Ejemplo si soy "Asesor Comercial":
-   "Asesor Comercial", "Ejecutivo de Ventas", "Vendedor B2B", "Account Manager".
-   Abrí varias búsquedas, pero navegá los resultados con ritmo humano: no abras muchas ofertas o páginas en ráfaga.
+2. **Buscar ofertas**: trabajá en dos fases para cubrir mucho mercado sin
+   quemar acciones ni disparar bloqueos: primero barré listados (barato),
+   después abrí detalles (caro).
 
-   Cobertura obligatoria:
+   Objetivo de guardado:
+   - Guardá en JobPilot alrededor de 50 ofertas (compatibles + dudosas) si el mercado las tiene. No presentes resultados finales con menos de 50 guardadas salvo que hayas agotado la cobertura completa definida abajo, y en ese caso detallá exactamente dónde se agotó.
+   - La cantidad de acciones ya usadas, el tiempo transcurrido o la lentitud del portal NUNCA son motivo para cortar antes. Si el portal está lento, esperá más entre acciones y seguí.
+
+   Estrategia de keywords:
    - Si Roles objetivo o portales figuran como "No definido", no inicies la búsqueda. Pedí al usuario que complete Perfil/Portales en JobPilot y esperá.
-   - Armá la estrategia de búsqueda desde el perfil completo: roles objetivo, stack, seniority, años de experiencia, modalidad y ubicación.
-   - A partir de esas palabras clave, generá variantes adicionales en español e inglés: sinónimos, títulos equivalentes, combinaciones con tecnologías del stack y términos de seniority. No te limites a las keywords literales cargadas.
-   - Usá el seniority buscado para generar variantes de búsqueda. Por ejemplo, si el perfil indica SSR o Semi Senior, probá variantes como "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level" y "Mid".
-   - Separá mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (títulos equivalentes o tecnologías cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
-   - Priorizá profundidad sobre velocidad. Antes de concluir una búsqueda normal, revisá como mínimo 80-120 tarjetas/resultados por portal y abrí/lee 40-60 avisos que parezcan mínimamente cercanos al perfil. Si hay menos resultados disponibles, indicá exactamente dónde se agotaron.
-   - Para cada keyword principal, revisá al menos 3 páginas completas de resultados. No uses "saturación" para cortar antes de página 3 salvo bloqueo técnico real, captcha, login, rate limit o ausencia total de resultados.
-   - Recién podés declarar saturación cuando hayas revisado al menos 5 queries distintas y 100 tarjetas/resultados totales, y más del 70% de los resultados nuevos sean repetidos o claramente fuera de perfil por título/empresa ya vistos.
-   - No alcanza con abrir 20-30 avisos en total. Si encontrás pocas compatibles, seguí buscando más lento y más profundo: más páginas, más variantes, otros portales configurados o filtros menos restrictivos del portal que no contradigan el perfil. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
-   - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si después de ampliar hay menos de 10 compatibles, presentá las que haya y explicá la cobertura realizada.
-   - Avanzá lento para evitar rate limit: esperá entre 8 y 15 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera. Es preferible tardar más y revisar mucho que hacer una búsqueda superficial.
-   - No abras más de 2 ofertas del mismo portal al mismo tiempo. Si hay señales de bloqueo, pasá inmediatamente a navegación secuencial.
-   - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto.
-   - No uses filtros más restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qué y hagas también una búsqueda amplia.
-   - En LinkedIn, revisá tanto búsquedas por keywords como la feed personalizada /jobs/search-results/ cuando esté disponible.
-   - Buscá variantes en inglés y español derivadas de los roles objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otros roles, adaptá las variantes a esos roles.
-   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste, cuántas tarjetas/resultados escaneaste, cuántos avisos abriste/leíste completos, cuántas páginas recorriste por query y cuántos quedaron pendientes por error de carga.
-   - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Informá exactamente páginas/resultados revisados, qué quedó sin revisar y llamá a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
+   - Armá la estrategia desde el perfil completo y planificá de entrada 8-10 queries distintas combinando: roles en español e inglés, títulos equivalentes, tecnologías del stack como keyword suelta, y variantes de seniority (por ejemplo "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level", "Jr").
+   - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto. No uses filtros más restrictivos que el perfil salvo que expliques por qué y hagas también una búsqueda amplia.
+   - En LinkedIn, revisá también la feed personalizada /jobs/search-results/ y las secciones de recomendadas cuando estén disponibles.
 
-3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
-   evaluá según mis criterios. Asigná score 1-10.
-   - Guardá en JobPilot solo ofertas compatibles o dudosas que valga la pena que el usuario revise.
-   - No guardes en JobPilot ofertas que violen un descarte duro o que claramente no interesan. Esas ofertas van solo en el resumen como "descartadas", con motivo breve.
-   - Si una oferta no carga o no podés leer la descripción completa, no la descartes por falta de información. Reintentá al menos 2 veces con espera; si sigue fallando, registrala en el resumen como pendiente por error de carga con URL, portal y reintentos.
-   - Si una oferta pide inglés Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique explícitamente que acepta ese nivel.
-   - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
+   Fase 1 — Barrido de listados (barato, sin abrir avisos):
+   - Recorré las páginas de resultados leyendo solo las tarjetas: título, empresa, modalidad, ubicación y salario si figura. Anotá cada oferta nueva como candidata con su link.
+   - Mínimo 3 páginas completas por query.
+   - Desde la tarjeta solo descartá lo OBVIAMENTE incompatible: título que ya viola una exclusión del perfil o seniority del título claramente fuera del rango. Todo lo demás es candidata. Si dudás mirando la tarjeta, es candidata.
+   - Ritmo: 3-6 segundos entre páginas. Una búsqueda por vez, avance secuencial.
+   - El barrido termina recién cuando corriste todas las queries planificadas con sus 3+ páginas y las últimas 2 queries aportaron menos del 10% de ofertas nuevas. "Los resultados se repiten" no es saturación si todavía quedan queries sin correr.
+
+   Fase 2 — Lectura de detalle (caro, solo candidatas):
+   - Abrí las candidatas de a una, secuencial, esperando 6-12 segundos entre avisos. Nunca en ráfaga, nunca más de 2 pestañas de detalle del mismo portal.
+   - Leé la descripción completa y decidí: compatible → guardala; dudosa → guardala con nota del motivo de duda; violación EXPLÍCITA de un filtro duro → descartala con motivo breve en el resumen.
+   - Ante la duda, guardá. Descartar exige que el texto del aviso viole explícitamente un filtro duro del perfil. Si tenés que inferir o suponer, es dudosa y se guarda. Guardar de más es barato porque el usuario filtra en JobPilot; descartar de más pierde ofertas.
+   - Que la descripción esté en inglés NO es motivo de descarte por sí solo. Descartá por idioma únicamente si el aviso exige explícitamente un nivel de inglés superior al del perfil (Strong, Advanced, Fluent, B2, C1, C2).
+   - Si un aviso no carga, reintentá 2 veces con espera. Si sigue sin cargar, guardalo igual como dudosa con los datos de la tarjeta y description "Descripción no cargó en el portal, revisar manualmente". No lo pierdas.
+   - Guardá en lotes con add_offers cada 5-10 ofertas evaluadas, no una por una.
+
+   Reglas anti-bloqueo:
+   - Ritmo humano siempre: nada de ráfagas de clicks ni aperturas masivas. Ante señales de fricción del portal, duplicá las esperas y seguí más despacio; no cortes.
+   - Ante captcha, verificación humana, rate limit persistente, login o 2FA, llamá a request_human_help con motivo y URL, pausá y esperá al usuario. No intentes resolverlo vos.
+   - Si hubo bloqueo, no afirmes que revisaste "todo lo relevante". Informá exactamente qué revisaste y qué quedó pendiente.
+
+3. **Evaluar y guardar**: el score lo calcula JobPilot al guardar. No inventes
+   un score propio: reportá el que devuelve add_offer/add_offers.
+   - Guardá compatibles y dudosas. Las descartadas por violación explícita de filtro duro van solo en el resumen, con motivo breve.
+   - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, guardala como dudosa con nota en vez de ponerla en el top.
 
 4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
    Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
-   Mostrame y esperá mi confirmación.
-   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas guardadas, descartadas no guardadas y pendientes por bloqueo.
+   Mostrame y esperá mi confirmación. No rellenes el top con ofertas que no matchean solo para llegar a 10.
+   Antes de la tabla, incluí un resumen de cobertura: queries usadas y páginas por query, tarjetas escaneadas, candidatas abiertas, ofertas guardadas (contra el objetivo de ~50), descartadas no guardadas con motivo y pendientes por bloqueo.
 
 5. **Esperar instrucción**:
    - "confirmar todos" → postular en orden
