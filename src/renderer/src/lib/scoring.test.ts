@@ -4,6 +4,7 @@ import type { JobOffer, UserProfile } from '../types'
 
 const TEST_PROFILE: UserProfile = {
   targetRole: 'Frontend Developer',
+  targetRoles: ['Frontend Developer'],
   personalInfo: {
     dni: '',
     email: '',
@@ -12,8 +13,14 @@ const TEST_PROFILE: UserProfile = {
   },
   mainStack: ['React', 'TypeScript', 'Angular', 'APIs REST', 'Jest', 'Design System', 'Scrum'],
   secondaryStack: [],
+  targetSeniority: ['Junior', 'Semi Senior', 'SSR'],
+  experienceYearsMin: 2,
+  experienceYearsMax: 4,
   experience: '2+ anos',
   softSkills: ['Trabajo en equipo'],
+  salaryCurrency: 'USD',
+  salaryMin: 2000,
+  salaryMax: undefined,
   salaryExpectation: 'USD 2000 como minimo',
   availability: ['Full-time'],
   preferredModality: ['Remoto', 'Hibrido'],
@@ -77,6 +84,97 @@ describe('scoreOffer', () => {
 
     expect(score).toBeLessThan(40)
     expect(negatives).toContain('DevOps')
+  })
+
+  it('no penaliza Semi Senior por una exclusion generica Senior', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer Semi Senior React',
+      description: 'React, TypeScript, remoto para CABA. 2-3 anos de experiencia.'
+    })
+
+    const { score, positives, negatives } = scoreOffer(offer, {
+      ...TEST_PROFILE,
+      avoid: [...TEST_PROFILE.avoid, 'Senior']
+    })
+
+    expect(score).toBeGreaterThanOrEqual(65)
+    expect(positives).toContain('seniority: semi senior')
+    expect(negatives).not.toContain('Senior')
+  })
+
+  it('penaliza seniority demasiado alto para un perfil junior/ssr', () => {
+    const offer = makeOffer({
+      title: 'Senior Frontend Developer React',
+      description: 'React, TypeScript, arquitectura frontend. 7+ anos de experiencia obligatoria.'
+    })
+
+    const { score, negatives } = scoreOffer(offer, TEST_PROFILE)
+
+    expect(score).toBeLessThan(65)
+    expect(negatives).toContain('seniority alto: senior')
+    expect(negatives).toContain('experiencia requerida: 7+ años')
+  })
+
+  it('usa el rango explicito de experiencia para penalizar requisitos demasiado altos', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer SSR React',
+      description: 'React, TypeScript, remoto CABA. 4+ anos de experiencia obligatoria.'
+    })
+
+    const { negatives } = scoreOffer(offer, {
+      ...TEST_PROFILE,
+      experienceYearsMax: 3
+    })
+
+    expect(negatives).toContain('experiencia requerida: 4+ años')
+  })
+
+  it('penaliza ofertas por debajo del rango minimo de experiencia', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer React',
+      description: 'React, TypeScript, remoto CABA. 0-1 anos de experiencia.'
+    })
+
+    const { negatives } = scoreOffer(offer, TEST_PROFILE)
+
+    expect(negatives).toContain('experiencia por debajo del rango: 1 años')
+  })
+
+  it('penaliza salario publicado por debajo de la pretension', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer SSR React',
+      description: 'React, TypeScript, remoto CABA. 2-3 anos de experiencia.',
+      salary: 'USD 1200-1800'
+    })
+
+    const { score, negatives } = scoreOffer(offer, TEST_PROFILE)
+
+    expect(score).toBeLessThan(65)
+    expect(negatives).toContain('salario debajo de pretensión')
+  })
+
+  it('reconoce salario compatible cuando el rango publicado alcanza la pretension', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer SSR React',
+      description: 'React, TypeScript, remoto CABA. 2-3 anos de experiencia.',
+      salary: 'USD 2000-2800'
+    })
+
+    const { positives } = scoreOffer(offer, TEST_PROFILE)
+
+    expect(positives).toContain('salario compatible')
+  })
+
+  it('no trata Mid-Senior del portal como Senior real si los años son compatibles', () => {
+    const offer = makeOffer({
+      title: 'Frontend Developer React',
+      description: 'LinkedIn seniority: Mid-Senior level. React, TypeScript, remoto CABA. 2-4 anos.'
+    })
+
+    const { score, negatives } = scoreOffer(offer, TEST_PROFILE)
+
+    expect(score).toBeGreaterThanOrEqual(65)
+    expect(negatives).not.toContain('seniority alto: senior')
   })
 
   it('no matchea un stack dentro de otra palabra', () => {

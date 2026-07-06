@@ -32,16 +32,27 @@ interface RawOffer {
   modality?: string
   location?: string
   salary?: string
+  status?: string
+  decision?: string
+  save?: boolean
+  compatible?: boolean
 }
 
 interface Profile {
   targetRole?: string
+  targetRoles?: string[]
+  experienceYearsMin?: number
+  experienceYearsMax?: number
   experience?: string
   softSkills?: string[]
+  salaryCurrency?: string
+  salaryMin?: number
+  salaryMax?: number
   salaryExpectation?: string
   availability?: string[]
   mainStack?: string[]
   secondaryStack?: string[]
+  targetSeniority?: string[]
   avoid?: string[]
   preferredModality?: string[]
   preferredLocation?: string[]
@@ -55,8 +66,27 @@ function listOrFallback(values: string[] | undefined, fallback: string): string 
   return values?.length ? values.join(', ') : fallback
 }
 
+function formatExperienceYearsRange(profile: Profile | null): string {
+  const min = profile?.experienceYearsMin
+  const max = profile?.experienceYearsMax
+  if (typeof min === 'number' && typeof max === 'number') return min === max ? `${min} años` : `${min}-${max} años`
+  if (typeof min === 'number') return `${min}+ años`
+  if (typeof max === 'number') return `hasta ${max} años`
+  return profile?.experience?.trim() || 'No definido'
+}
+
+function formatSalaryRange(profile: Profile | null): string {
+  const currency = profile?.salaryCurrency || 'USD'
+  const min = profile?.salaryMin
+  const max = profile?.salaryMax
+  if (typeof min === 'number' && typeof max === 'number') return min === max ? `${currency} ${min}` : `${currency} ${min}-${max}`
+  if (typeof min === 'number') return `${currency} ${min} como mínimo`
+  if (typeof max === 'number') return `hasta ${currency} ${max}`
+  return profile?.salaryExpectation?.trim() || 'USD 2000 como minimo'
+}
+
 function portalText(settings: Settings | null): string {
-  return settings?.portals?.length ? settings.portals.join(', ') : '{portal_url}'
+  return settings?.portals?.length ? settings.portals.join(', ') : 'No definido'
 }
 
 const DEFAULT_AVOID = [
@@ -66,13 +96,18 @@ const DEFAULT_AVOID = [
   'Reviews negativos visibles',
   'Zona muy alejada no remota',
   'Inglés superior a B1',
-  'Senior',
+  'Senior 5+ años',
+  'Lead',
+  'Staff',
+  'Principal',
   'G&L GROUP'
 ]
 
+const DEFAULT_TARGET_SENIORITY = ['Junior', 'Semi Senior', 'SSR']
+
 function applyInstructionVariables(text: string, profile: Profile | null, settings: Settings | null): string {
   const portal = portalText(settings)
-  const role = profile?.targetRole || 'Frontend Developer / React Developer / Angular Developer / TypeScript Developer'
+  const role = listOrFallback(profile?.targetRoles, profile?.targetRole || 'No definido')
   return text
     .replaceAll('{portal_url}', portal)
     .replaceAll('{portal}', portal)
@@ -83,11 +118,12 @@ function applyInstructionVariables(text: string, profile: Profile | null, settin
 
 function buildSearchInstructions(profile: Profile | null, settings: Settings | null): string {
   const portal = portalText(settings)
-  const targetRole = profile?.targetRole || 'Frontend Developer / React Developer / Angular Developer / TypeScript Developer'
-  const experience = profile?.experience || 'Frontend Developer con 2+ años de experiencia construyendo aplicaciones web con React, TypeScript y Angular en entornos enterprise, gubernamentales y freelance.'
-  const skills = listOrFallback(profile?.mainStack, 'React, TypeScript, Angular, APIs REST, Jest / React Testing Library')
+  const targetRole = listOrFallback(profile?.targetRoles, profile?.targetRole || 'No definido')
+  const targetSeniority = listOrFallback(profile?.targetSeniority, DEFAULT_TARGET_SENIORITY.join(', '))
+  const skills = listOrFallback(profile?.mainStack, 'No definido')
   const softSkills = listOrFallback(profile?.softSkills, 'Trabajo en equipo, comunicación con clientes y equipos técnicos, adaptabilidad')
-  const salaryExpectation = profile?.salaryExpectation || 'USD 2000 como mínimo'
+  const experienceYears = formatExperienceYearsRange(profile)
+  const salaryExpectation = formatSalaryRange(profile)
   const modality = listOrFallback(profile?.preferredModality, 'híbrida (solo si es en Buenos Aires) / remota')
   const availability = listOrFallback(profile?.availability, 'full-time')
   const location = listOrFallback(profile?.preferredLocation, 'Buenos Aires, Argentina')
@@ -103,8 +139,9 @@ sin saltearte pasos, y reportá cada acción realizada.
 
 ## MI PERFIL
 
-- **Rol objetivo**: ${targetRole}
-- **Experiencia laboral**: ${experience}
+- **Roles objetivo**: ${targetRole}
+- **Seniority buscado**: ${targetSeniority}
+- **Años de experiencia buscados**: ${experienceYears}
 - **Competencias clave**: ${skills}
 - **Soft skills**: ${softSkills}
 - **Pretensión salarial**: ${salaryExpectation}
@@ -137,31 +174,37 @@ Ejecutá en orden:
    Abrí varias búsquedas, pero navegá los resultados con ritmo humano: no abras muchas ofertas o páginas en ráfaga.
 
    Cobertura obligatoria:
-   - Armá la estrategia de búsqueda desde el perfil completo: rol objetivo, stack, seniority/experiencia, modalidad y ubicación.
+   - Si Roles objetivo o portales figuran como "No definido", no inicies la búsqueda. Pedí al usuario que complete Perfil/Portales en JobPilot y esperá.
+   - Armá la estrategia de búsqueda desde el perfil completo: roles objetivo, stack, seniority, años de experiencia, modalidad y ubicación.
    - A partir de esas palabras clave, generá variantes adicionales en español e inglés: sinónimos, títulos equivalentes, combinaciones con tecnologías del stack y términos de seniority. No te limites a las keywords literales cargadas.
+   - Usá el seniority buscado para generar variantes de búsqueda. Por ejemplo, si el perfil indica SSR o Semi Senior, probá variantes como "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level" y "Mid".
    - Separá mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (títulos equivalentes o tecnologías cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
-   - Priorizá cobertura sobre velocidad. No te quedes solo con la primera página: intentá revisar al menos 3 páginas por búsqueda o 60-100 resultados totales por portal, salvo que se agoten resultados relevantes o el portal bloquee.
-   - No estás obligado a encontrar una cantidad mínima de ofertas compatibles. Sí estás obligado a revisar suficiente mercado antes de concluir. Si encontrás menos de 10 compatibles, ampliá la búsqueda con más variantes, más páginas, otros portales configurados en JobPilot o filtros menos restrictivos del portal que no contradigan el perfil (por ejemplo fecha, orden, radio o seniority automático). Si hay un solo portal configurado, ampliá solo dentro de ese portal. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
+   - Priorizá profundidad sobre velocidad. Antes de concluir una búsqueda normal, revisá como mínimo 80-120 tarjetas/resultados por portal y abrí/lee 40-60 avisos que parezcan mínimamente cercanos al perfil. Si hay menos resultados disponibles, indicá exactamente dónde se agotaron.
+   - Para cada keyword principal, revisá al menos 3 páginas completas de resultados. No uses "saturación" para cortar antes de página 3 salvo bloqueo técnico real, captcha, login, rate limit o ausencia total de resultados.
+   - Recién podés declarar saturación cuando hayas revisado al menos 5 queries distintas y 100 tarjetas/resultados totales, y más del 70% de los resultados nuevos sean repetidos o claramente fuera de perfil por título/empresa ya vistos.
+   - No alcanza con abrir 20-30 avisos en total. Si encontrás pocas compatibles, seguí buscando más lento y más profundo: más páginas, más variantes, otros portales configurados o filtros menos restrictivos del portal que no contradigan el perfil. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
    - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si después de ampliar hay menos de 10 compatibles, presentá las que haya y explicá la cobertura realizada.
-   - Avanzá lento para evitar rate limit: esperá entre 6 y 12 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera.
+   - Avanzá lento para evitar rate limit: esperá entre 8 y 15 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera. Es preferible tardar más y revisar mucho que hacer una búsqueda superficial.
    - No abras más de 2 ofertas del mismo portal al mismo tiempo. Si hay señales de bloqueo, pasá inmediatamente a navegación secuencial.
    - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto.
    - No uses filtros más restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qué y hagas también una búsqueda amplia.
    - En LinkedIn, revisá tanto búsquedas por keywords como la feed personalizada /jobs/search-results/ cuando esté disponible.
-   - Buscá variantes en inglés y español derivadas del rol objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otro rol, adaptá las variantes a ese rol.
-   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste para que el usuario pueda auditar la búsqueda.
+   - Buscá variantes en inglés y español derivadas de los roles objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otros roles, adaptá las variantes a esos roles.
+   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste, cuántas tarjetas/resultados escaneaste, cuántos avisos abriste/leíste completos, cuántas páginas recorriste por query y cuántos quedaron pendientes por error de carga.
    - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Informá exactamente páginas/resultados revisados, qué quedó sin revisar y llamá a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
 
 3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
    evaluá según mis criterios. Asigná score 1-10.
-   - No incluyas en el top ofertas que violen un descarte duro. Si son interesantes pero incumplen, listalas aparte como "descartadas".
+   - Guardá en JobPilot solo ofertas compatibles o dudosas que valga la pena que el usuario revise.
+   - No guardes en JobPilot ofertas que violen un descarte duro o que claramente no interesan. Esas ofertas van solo en el resumen como "descartadas", con motivo breve.
+   - Si una oferta no carga o no podés leer la descripción completa, no la descartes por falta de información. Reintentá al menos 2 veces con espera; si sigue fallando, registrala en el resumen como pendiente por error de carga con URL, portal y reintentos.
    - Si una oferta pide inglés Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique explícitamente que acepta ese nivel.
    - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
 
 4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
    Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
    Mostrame y esperá mi confirmación.
-   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas válidas, descartadas y pendientes por bloqueo.
+   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas guardadas, descartadas no guardadas y pendientes por bloqueo.
 
 5. **Esperar instrucción**:
    - "confirmar todos" → postular en orden
@@ -213,6 +256,147 @@ function hasTerm(text: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text)
 }
 
+const SENIORITY_PATTERNS: Record<string, RegExp[]> = {
+  trainee: [/(^|[^a-z0-9])(trainee|pasante|internship|intern)([^a-z0-9]|$)/i],
+  junior: [/(^|[^a-z0-9])(junior|jr\.?)([^a-z0-9]|$)/i],
+  'semi senior': [/(^|[^a-z0-9])(semi[\s-]?senior|semi[\s-]?sr\.?|semisenior|ssr)([^a-z0-9]|$)/i],
+  ssr: [/(^|[^a-z0-9])(ssr|semi[\s-]?senior|semi[\s-]?sr\.?|semisenior)([^a-z0-9]|$)/i],
+  mid: [/(^|[^a-z0-9])(mid[\s-]?level|mid|intermediate|semi[\s-]?senior|ssr)([^a-z0-9]|$)/i],
+  lead: [/(^|[^a-z0-9])(lead|tech lead|team lead)([^a-z0-9]|$)/i],
+  staff: [/(^|[^a-z0-9])staff([^a-z0-9]|$)/i],
+  principal: [/(^|[^a-z0-9])principal([^a-z0-9]|$)/i]
+}
+
+const SENIORITY_MAX_YEARS: Record<string, number> = {
+  trainee: 1,
+  junior: 2,
+  'semi senior': 4,
+  ssr: 4,
+  mid: 4,
+  senior: 99,
+  lead: 99,
+  staff: 99,
+  principal: 99
+}
+
+interface YearsRange {
+  min: number
+  max: number
+}
+
+interface SalaryRange {
+  currency?: string
+  min?: number
+  max?: number
+}
+
+function normalizeSeniority(value: string): string {
+  return value.trim().toLowerCase()
+    .replace(/\./g, '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function getTargetSeniorities(profile: Profile): string[] {
+  const values = (profile.targetSeniority?.length ? profile.targetSeniority : DEFAULT_TARGET_SENIORITY)
+    .map(normalizeSeniority)
+  return [...new Set(values)]
+}
+
+function matchesStandaloneSenior(text: string): boolean {
+  const seniorMatches = [...text.matchAll(/(^|[^a-z0-9])(senior|sr\.?)([^a-z0-9]|$)/gi)]
+  return seniorMatches.some((match) => {
+    const start = match.index ?? 0
+    const prefix = text.slice(Math.max(0, start - 10), start + match[1].length).toLowerCase()
+    return !/(semi[\s-]?|mid[\s-]?)$/.test(prefix)
+  })
+}
+
+function matchesSeniority(text: string, seniority: string): boolean {
+  if (seniority === 'senior') return matchesStandaloneSenior(text)
+  const patterns = SENIORITY_PATTERNS[seniority]
+  return patterns ? patterns.some((pattern) => pattern.test(text)) : hasTerm(text, seniority)
+}
+
+function requiredYearsRange(text: string): YearsRange | null {
+  if (/(sin experiencia|no se requiere experiencia|without experience|no experience)/i.test(text)) {
+    return { min: 0, max: 0 }
+  }
+  const matches = [...text.matchAll(/(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*\+?\s*(?:años|anos|years|yrs)/gi)]
+  if (matches.length === 0) return null
+  const ranges = matches.map((match) => ({
+    min: Number(match[1]),
+    max: Number(match[2] ?? match[1])
+  }))
+  return {
+    min: Math.min(...ranges.map((range) => range.min)),
+    max: Math.max(...ranges.map((range) => range.max))
+  }
+}
+
+function parseMoney(value: string): number | undefined {
+  const compact = value.replace(/\s+/g, '')
+  const normalized = compact.includes(',') && !compact.includes('.')
+    ? compact.replace(',', '.')
+    : compact.replace(/[.,]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseSalaryRange(value: string | undefined): SalaryRange {
+  const text = value ?? ''
+  const currencyMatch = text.match(/(USD|ARS|EUR|US\$|U\$S|\$)/i)
+  const rawCurrency = currencyMatch?.[1]
+  const currency = rawCurrency
+    ? (rawCurrency === '$' ? 'ARS' : rawCurrency.replace(/^US\$|^U\$S$/i, 'USD').toUpperCase())
+    : undefined
+  const numbers = [...text.matchAll(/\d[\d.,]*/g)]
+    .map((match) => parseMoney(match[0]))
+    .filter((number): number is number => typeof number === 'number')
+  return { currency, min: numbers[0], max: numbers[1] ?? numbers[0] }
+}
+
+function hasHighSenioritySignal(text: string): string | null {
+  for (const level of ['lead', 'staff', 'principal', 'senior']) {
+    if (matchesSeniority(text, level)) return level
+  }
+  return null
+}
+
+function isAvoidMatch(text: string, term: string): boolean {
+  const normalized = normalizeSeniority(term)
+  if (normalized === 'senior') return matchesSeniority(text, 'senior')
+  return hasTerm(text, term)
+}
+
+function scoreSeniority(text: string, profile: Profile): ScoreResult {
+  const targets = getTargetSeniorities(profile)
+  const positives: string[] = []
+  const negatives: string[] = []
+
+  const matchedTarget = targets.find((level) => matchesSeniority(text, level))
+  if (matchedTarget) positives.push(`seniority: ${matchedTarget}`)
+
+  const highSignal = hasHighSenioritySignal(text)
+  const seniorityMaxYears = Math.max(...targets.map((level) => SENIORITY_MAX_YEARS[level] ?? 4))
+  const maxAcceptedYears = typeof profile.experienceYearsMax === 'number'
+    ? profile.experienceYearsMax
+    : seniorityMaxYears
+  const years = requiredYearsRange(text)
+
+  if (highSignal && !targets.includes(highSignal)) negatives.push(`seniority alto: ${highSignal}`)
+  if (years !== null && years.max > maxAcceptedYears) negatives.push(`experiencia requerida: ${years.max}+ años`)
+  if (years !== null && typeof profile.experienceYearsMin === 'number' && years.max < profile.experienceYearsMin) {
+    negatives.push(`experiencia por debajo del rango: ${years.max} años`)
+  }
+
+  return {
+    score: (matchedTarget ? 10 : 0) - (negatives.length ? 22 : 0),
+    positives,
+    negatives
+  }
+}
+
 interface ScoreResult {
   score: number
   positives: string[]
@@ -234,7 +418,26 @@ function scoreOffer(offer: RawOffer, profile: Profile | null): ScoreResult {
   if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) { score += 6; positives.push('modalidad') }
   if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) { score += 6; positives.push('ubicación') }
 
-  for (const bad of profile.avoid ?? []) if (hasTerm(text, bad)) { score -= 18; negatives.push(bad) }
+  const seniority = scoreSeniority(text, profile)
+  score += seniority.score
+  positives.push(...seniority.positives)
+  negatives.push(...seniority.negatives)
+
+  const offeredSalary = parseSalaryRange(offer.salary)
+  const sameCurrency = !offeredSalary.currency ||
+    !profile.salaryCurrency ||
+    offeredSalary.currency === profile.salaryCurrency.toUpperCase()
+  if (typeof profile.salaryMin === 'number' && typeof offeredSalary.max === 'number' && sameCurrency) {
+    if (offeredSalary.max < profile.salaryMin) {
+      score -= 18
+      negatives.push('salario debajo de pretensión')
+    } else {
+      score += 6
+      positives.push('salario compatible')
+    }
+  }
+
+  for (const bad of profile.avoid ?? []) if (isAvoidMatch(text, bad)) { score -= 18; negatives.push(bad) }
 
   return { score: Math.max(0, Math.min(100, score)), positives, negatives }
 }
@@ -287,6 +490,12 @@ function findDup(offers: Array<Record<string, unknown>>, raw: RawOffer): Record<
   const key = `${(raw.title ?? '').trim().toLowerCase()}|${(raw.company ?? '').trim().toLowerCase()}`
   if (key === '|') return undefined
   return offers.find((o) => `${String(o.title ?? '').toLowerCase()}|${String(o.company ?? '').toLowerCase()}` === key)
+}
+
+function rawOfferShouldNotBeSaved(raw: RawOffer): boolean {
+  if (raw.save === false || raw.compatible === false) return true
+  const decision = `${raw.status ?? ''} ${raw.decision ?? ''}`.toLowerCase()
+  return /\b(rechazad[ao]s?|descartad[ao]s?|discarded|rejected|hard reject)\b/.test(decision)
 }
 
 const log = (msg: string) =>
@@ -394,7 +603,7 @@ const TOOLS = [
   },
   {
     name: 'add_offer',
-    description: 'Agrega una oferta laboral encontrada a JobPilot. Úsala cada vez que encontrás una oferta relevante mientras buscás trabajo para el usuario.',
+    description: 'Agrega una oferta laboral a JobPilot solo si es compatible o dudosa y vale la pena que el usuario la revise. No uses esta herramienta para ofertas descartadas por criterios duros; reportalas solo en el resumen.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -428,7 +637,7 @@ const TOOLS = [
   },
   {
     name: 'add_offers',
-    description: 'Agrega múltiples ofertas laborales de una vez. Úsala al final de una sesión de búsqueda para guardar todas las ofertas encontradas en JobPilot.',
+    description: 'Agrega múltiples ofertas laborales compatibles o dudosas de una vez. No incluyas ofertas descartadas por criterios duros; esas se informan solo en el resumen de cobertura.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -616,6 +825,9 @@ function createMcpServer() {
 
         case 'add_offer': {
           const a = args as RawOffer
+          if (rawOfferShouldNotBeSaved(a)) {
+            return { content: [{ type: 'text', text: `Oferta "${a.title ?? 'sin título'}" no guardada: fue marcada como descartada/no compatible. Informala solo en el resumen.` }] }
+          }
           const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
           const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
           const dup = findDup(offers, a)
@@ -635,8 +847,13 @@ function createMcpServer() {
           const profile = readJson<Profile | null>(join(DATA_DIR, 'profile.json'), null)
           const offers = readJson<Array<Record<string, unknown>>>(join(DATA_DIR, 'offers.json'), [])
           const skipped: string[] = []
+          const notSaved: string[] = []
           const built: Array<Record<string, unknown>> = []
           for (const r of rawOffers) {
+            if (rawOfferShouldNotBeSaved(r)) {
+              notSaved.push(r.title ?? 'Sin título')
+              continue
+            }
             const dup = findDup([...offers, ...built], r)
             if (dup) { skipped.push(`${dup.title} (${dup.status})`); continue }
             built.push(buildOffer(r, profile))
@@ -647,9 +864,10 @@ function createMcpServer() {
           return {
             content: [{
               type: 'text',
-              text: `${built.length} oferta(s) nuevas guardadas (${recomendadas} recomendadas). ${skipped.length} ya existían y se saltaron.\n\n` +
-                built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n') +
-                (skipped.length ? `\n\nYa existentes (no agregadas): ${skipped.join(', ')}` : '')
+                text: `${built.length} oferta(s) nuevas guardadas (${recomendadas} recomendadas). ${skipped.length} ya existían y se saltaron.\n\n` +
+                  built.map((o) => `• ${o.title} @ ${o.company} — score ${o.score} (${o.status})`).join('\n') +
+                (skipped.length ? `\n\nYa existentes (no agregadas): ${skipped.join(', ')}` : '') +
+                (notSaved.length ? `\n\nDescartadas no guardadas: ${notSaved.join(', ')}` : '')
             }]
           }
         }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Copy, CheckCheck, ChevronDown, ChevronUp, ClipboardPaste, Settings2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { col, alpha } from '../lib/theme'
+import { formatExperienceYearsRange, formatSalaryRange } from '../lib/mockData'
 import type { UserProfile } from '../types'
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -36,17 +37,22 @@ const DEFAULT_AVOID = [
   'Reviews negativos visibles',
   'Zona muy alejada no remota',
   'Inglés superior a B1',
-  'Senior',
+  'Senior 5+ años',
+  'Lead',
+  'Staff',
+  'Principal',
   'G&L GROUP'
 ]
 
+const DEFAULT_TARGET_SENIORITY = ['Junior', 'Semi Senior', 'SSR']
 function buildDefaultSearchInstructions(portals: string[], profile: UserProfile): string {
-  const portal = portals.length ? portals.join(', ') : 'LinkedIn, Bumeran, GetOnBoard'
-  const targetRole = profile.targetRole || 'Frontend Developer / React Developer / Angular Developer / TypeScript Developer'
-  const experience = profile.experience || 'Frontend Developer con 2+ años de experiencia construyendo aplicaciones web con React, TypeScript y Angular en entornos enterprise, gubernamentales y freelance.'
-  const skills = listOrFallback(profile.mainStack, 'React, TypeScript, Angular, APIs REST, Jest / React Testing Library')
+  const portal = portals.length ? portals.join(', ') : 'No definido'
+  const targetRole = listOrFallback(profile.targetRoles, profile.targetRole || 'No definido')
+  const targetSeniority = listOrFallback(profile.targetSeniority, DEFAULT_TARGET_SENIORITY.join(', '))
+  const skills = listOrFallback(profile.mainStack, 'No definido')
   const softSkills = listOrFallback(profile.softSkills, 'Trabajo en equipo, comunicación con clientes y equipos técnicos, adaptabilidad')
-  const salaryExpectation = profile.salaryExpectation || 'USD 2000 como mínimo'
+  const experienceYears = formatExperienceYearsRange(profile)
+  const salaryExpectation = formatSalaryRange(profile)
   const modality = listOrFallback(profile.preferredModality, 'híbrida (solo si es en Buenos Aires) / remota')
   const availability = listOrFallback(profile.availability, 'full-time')
   const location = listOrFallback(profile.preferredLocation, 'Buenos Aires, Argentina')
@@ -62,8 +68,9 @@ sin saltearte pasos, y reportá cada acción realizada.
 
 ## MI PERFIL
 
-- **Rol objetivo**: ${targetRole}
-- **Experiencia laboral**: ${experience}
+- **Roles objetivo**: ${targetRole}
+- **Seniority buscado**: ${targetSeniority}
+- **Años de experiencia buscados**: ${experienceYears}
 - **Competencias clave**: ${skills}
 - **Soft skills**: ${softSkills}
 - **Pretensión salarial**: ${salaryExpectation}
@@ -96,31 +103,37 @@ Ejecutá en orden:
    Abrí varias búsquedas, pero navegá los resultados con ritmo humano: no abras muchas ofertas o páginas en ráfaga.
 
    Cobertura obligatoria:
-   - Armá la estrategia de búsqueda desde el perfil completo: rol objetivo, stack, seniority/experiencia, modalidad y ubicación.
+   - Si Roles objetivo o portales figuran como "No definido", no inicies la búsqueda. Pedí al usuario que complete Perfil/Portales en JobPilot y esperá.
+   - Armá la estrategia de búsqueda desde el perfil completo: roles objetivo, stack, seniority, años de experiencia, modalidad y ubicación.
    - A partir de esas palabras clave, generá variantes adicionales en español e inglés: sinónimos, títulos equivalentes, combinaciones con tecnologías del stack y términos de seniority. No te limites a las keywords literales cargadas.
+   - Usá el seniority buscado para generar variantes de búsqueda. Por ejemplo, si el perfil indica SSR o Semi Senior, probá variantes como "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level" y "Mid".
    - Separá mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (títulos equivalentes o tecnologías cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
-   - Priorizá cobertura sobre velocidad. No te quedes solo con la primera página: intentá revisar al menos 3 páginas por búsqueda o 60-100 resultados totales por portal, salvo que se agoten resultados relevantes o el portal bloquee.
-   - No estás obligado a encontrar una cantidad mínima de ofertas compatibles. Sí estás obligado a revisar suficiente mercado antes de concluir. Si encontrás menos de 10 compatibles, ampliá la búsqueda con más variantes, más páginas, otros portales configurados en JobPilot o filtros menos restrictivos del portal que no contradigan el perfil (por ejemplo fecha, orden, radio o seniority automático). Si hay un solo portal configurado, ampliá solo dentro de ese portal. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
+   - Priorizá profundidad sobre velocidad. Antes de concluir una búsqueda normal, revisá como mínimo 80-120 tarjetas/resultados por portal y abrí/lee 40-60 avisos que parezcan mínimamente cercanos al perfil. Si hay menos resultados disponibles, indicá exactamente dónde se agotaron.
+   - Para cada keyword principal, revisá al menos 3 páginas completas de resultados. No uses "saturación" para cortar antes de página 3 salvo bloqueo técnico real, captcha, login, rate limit o ausencia total de resultados.
+   - Recién podés declarar saturación cuando hayas revisado al menos 5 queries distintas y 100 tarjetas/resultados totales, y más del 70% de los resultados nuevos sean repetidos o claramente fuera de perfil por título/empresa ya vistos.
+   - No alcanza con abrir 20-30 avisos en total. Si encontrás pocas compatibles, seguí buscando más lento y más profundo: más páginas, más variantes, otros portales configurados o filtros menos restrictivos del portal que no contradigan el perfil. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
    - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si después de ampliar hay menos de 10 compatibles, presentá las que haya y explicá la cobertura realizada.
-   - Avanzá lento para evitar rate limit: esperá entre 6 y 12 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera.
+   - Avanzá lento para evitar rate limit: esperá entre 8 y 15 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera. Es preferible tardar más y revisar mucho que hacer una búsqueda superficial.
    - No abras más de 2 ofertas del mismo portal al mismo tiempo. Si hay señales de bloqueo, pasá inmediatamente a navegación secuencial.
    - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto.
    - No uses filtros más restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qué y hagas también una búsqueda amplia.
    - En LinkedIn, revisá tanto búsquedas por keywords como la feed personalizada /jobs/search-results/ cuando esté disponible.
-   - Buscá variantes en inglés y español derivadas del rol objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otro rol, adaptá las variantes a ese rol.
-   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste para que el usuario pueda auditar la búsqueda.
+   - Buscá variantes en inglés y español derivadas de los roles objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otros roles, adaptá las variantes a esos roles.
+   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste, cuántas tarjetas/resultados escaneaste, cuántos avisos abriste/leíste completos, cuántas páginas recorriste por query y cuántos quedaron pendientes por error de carga.
    - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Informá exactamente páginas/resultados revisados, qué quedó sin revisar y llamá a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
 
 3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
    evaluá según mis criterios. Asigná score 1-10.
-   - No incluyas en el top ofertas que violen un descarte duro. Si son interesantes pero incumplen, listalas aparte como "descartadas".
+   - Guardá en JobPilot solo ofertas compatibles o dudosas que valga la pena que el usuario revise.
+   - No guardes en JobPilot ofertas que violen un descarte duro o que claramente no interesan. Esas ofertas van solo en el resumen como "descartadas", con motivo breve.
+   - Si una oferta no carga o no podés leer la descripción completa, no la descartes por falta de información. Reintentá al menos 2 veces con espera; si sigue fallando, registrala en el resumen como pendiente por error de carga con URL, portal y reintentos.
    - Si una oferta pide inglés Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique explícitamente que acepta ese nivel.
    - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
 
 4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
    Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
    Mostrame y esperá mi confirmación.
-   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas válidas, descartadas y pendientes por bloqueo.
+   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas guardadas, descartadas no guardadas y pendientes por bloqueo.
 
 5. **Esperar instrucción**:
    - "confirmar todos" → postular en orden

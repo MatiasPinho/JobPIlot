@@ -65,11 +65,12 @@ No lee prompts editables desde la UI. La pantalla Instrucciones solo muestra el 
 
 Incluye:
 
-- rol objetivo
-- experiencia
+- roles objetivo
+- seniority buscado
+- rango de anos de experiencia
 - stack completo desde Perfil
 - soft skills
-- pretension salarial
+- rango de pretension salarial
 - modalidad preferida
 - disponibilidad
 - zona de residencia
@@ -79,6 +80,9 @@ Incluye:
 - plan de tareas de busqueda
 - regla de presentar top 10 y esperar confirmacion
 - regla de no postular
+- regla de guardar en JobPilot solo ofertas compatibles o dudosas, no descartes duros
+- minimo de cobertura: 80-120 tarjetas/resultados por portal y 40-60 avisos abiertos/leidos cuando haya volumen disponible
+- regla de no declarar saturacion antes de 5 queries, 100 resultados totales y 3 paginas por keyword principal, salvo bloqueo o ausencia real de resultados
 
 No incluye:
 
@@ -124,11 +128,18 @@ El perfil no usa placeholders porque se inserta como texto ya resuelto desde `pr
 Campos relevantes que Cowork puede ver por `get_profile`:
 
 - `targetRole`
+- `targetRoles`
 - `personalInfo`
 - `mainStack`
 - `secondaryStack` por compatibilidad, hoy vacio desde la UI
+- `targetSeniority`
+- `experienceYearsMin`
+- `experienceYearsMax`
 - `experience`
 - `softSkills`
+- `salaryCurrency`
+- `salaryMin`
+- `salaryMax`
 - `salaryExpectation`
 - `availability`
 - `preferredModality`
@@ -142,7 +153,8 @@ Transparencia importante:
 
 - `personalInfo` puede llegar a Cowork por `get_profile`.
 - `cvText` puede llegar a Cowork por `get_profile`.
-- Ninguno de esos dos campos influye en scoring.
+- `experience` y `salaryExpectation` se conservan por compatibilidad en `get_profile`; los campos operativos son los rangos estructurados.
+- `personalInfo`, `cvText` y `experience` no influyen en scoring.
 - La advertencia de datos sensibles solo se muestra en la UI.
 
 ## Scoring y estados
@@ -159,7 +171,20 @@ Formula actual:
 - Stack: +8 por match, maximo +30.
 - Modalidad preferida: +6.
 - Ubicacion preferida: +6.
+- Seniority compatible: +10.
+- Seniority demasiado alto o anos requeridos por encima del rango maximo del perfil: -22.
+- Anos requeridos por debajo del rango minimo del perfil: penalizacion de seniority/experiencia.
+- Salario publicado compatible: +6.
+- Salario publicado por debajo de la pretension: -18.
 - Filtros de exclusion: -18 por match.
+
+El seniority se evalua con reglas propias. `Semi Senior`, `Semi-Senior` y `SSR`
+son compatibles entre si. Una exclusion generica `Senior` no debe penalizar una
+oferta `Semi Senior`; solo debe matchear Senior real.
+
+Si `Roles objetivo` o portales figuran como `No definido`, Cowork debe detener
+la busqueda y pedir que se complete Perfil/Portales en JobPilot. No debe usar
+roles frontend ni placeholders como fallback.
 
 ## Duplicados y ofertas ya postuladas
 
@@ -171,6 +196,20 @@ Cuando Cowork registra ofertas con `add_offer` o `add_offers`, el MCP intenta de
 Si la oferta duplicada ya esta `postulada`, el MCP devuelve un mensaje indicando que ya estaba cargada y postulada.
 
 Esto no reemplaza la observacion visual del portal. Cowork igual debe mirar si el portal muestra que ya fue aplicada.
+
+## Descartes durante la busqueda
+
+Cowork no debe guardar en JobPilot las ofertas que reviso y descarto por criterios
+duros o por falta clara de interes. Esas ofertas solo deben aparecer en el resumen
+de cobertura como `descartadas no guardadas`, con un motivo breve.
+
+Las ofertas que no cargan o cuya descripcion completa no puede leerse no son
+descartes por criterio. Deben reportarse como `pendientes por error de carga`,
+incluyendo URL, portal y reintentos.
+
+Solo se guardan ofertas compatibles o dudosas que el usuario tenga que revisar. Si
+el usuario luego rechaza una oferta desde JobPilot, ahi si queda registro como
+`rechazada`.
 
 ## System prompt minimo para Cowork
 

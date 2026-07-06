@@ -10,7 +10,13 @@ import type {
 } from '../types'
 import { scoreOffer, classifyByScore } from '../lib/scoring'
 import { detectDuplicates } from '../lib/deduplication'
-import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from '../lib/mockData'
+import {
+  DEFAULT_PROFILE,
+  DEFAULT_SETTINGS,
+  parseExperienceYears,
+  parseSalaryExpectation,
+  parseTargetRoles
+} from '../lib/mockData'
 
 interface Notification {
   id: string
@@ -241,9 +247,20 @@ export const useStore = create<AppState>((set, get) => ({
 
       const defaultFolder = await window.api.getDefaultWorkFolder()
 
+      const experienceRange = parseExperienceYears(profile?.experience)
+      const salaryRange = parseSalaryExpectation(profile?.salaryExpectation)
       const loadedProfile = {
         ...DEFAULT_PROFILE,
         ...(profile ?? {}),
+        targetRoles: profile?.targetRoles?.length
+          ? profile.targetRoles
+          : parseTargetRoles(profile?.targetRole),
+        targetSeniority: profile?.targetSeniority ?? DEFAULT_PROFILE.targetSeniority,
+        experienceYearsMin: profile?.experienceYearsMin ?? experienceRange.min,
+        experienceYearsMax: profile?.experienceYearsMax ?? experienceRange.max,
+        salaryCurrency: profile?.salaryCurrency ?? salaryRange.currency ?? DEFAULT_PROFILE.salaryCurrency,
+        salaryMin: profile?.salaryMin ?? salaryRange.min ?? DEFAULT_PROFILE.salaryMin,
+        salaryMax: profile?.salaryMax ?? salaryRange.max,
         personalInfo: {
           ...DEFAULT_PROFILE.personalInfo,
           ...(profile?.personalInfo ?? {})

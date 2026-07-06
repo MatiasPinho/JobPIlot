@@ -7730,6 +7730,115 @@ function hasTerm(text, term) {
   const escaped = t2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(text);
 }
+const DEFAULT_TARGET_SENIORITY$2 = ["Junior", "Semi Senior", "SSR"];
+const SENIORITY_PATTERNS = {
+  trainee: [/(^|[^a-z0-9])(trainee|pasante|internship|intern)([^a-z0-9]|$)/i],
+  junior: [/(^|[^a-z0-9])(junior|jr\.?)([^a-z0-9]|$)/i],
+  "semi senior": [
+    /(^|[^a-z0-9])(semi[\s-]?senior|semi[\s-]?sr\.?|semisenior|ssr)([^a-z0-9]|$)/i
+  ],
+  ssr: [/(^|[^a-z0-9])(ssr|semi[\s-]?senior|semi[\s-]?sr\.?|semisenior)([^a-z0-9]|$)/i],
+  mid: [/(^|[^a-z0-9])(mid[\s-]?level|mid|intermediate|semi[\s-]?senior|ssr)([^a-z0-9]|$)/i],
+  lead: [/(^|[^a-z0-9])(lead|tech lead|team lead)([^a-z0-9]|$)/i],
+  staff: [/(^|[^a-z0-9])staff([^a-z0-9]|$)/i],
+  principal: [/(^|[^a-z0-9])principal([^a-z0-9]|$)/i]
+};
+const SENIORITY_MAX_YEARS = {
+  trainee: 1,
+  junior: 2,
+  "semi senior": 4,
+  ssr: 4,
+  mid: 4,
+  senior: 99,
+  lead: 99,
+  staff: 99,
+  principal: 99
+};
+function normalizeSeniority(value) {
+  return value.trim().toLowerCase().replace(/\./g, "").replace(/_/g, " ").replace(/\s+/g, " ");
+}
+function getTargetSeniorities(profile) {
+  const values = (profile.targetSeniority?.length ? profile.targetSeniority : DEFAULT_TARGET_SENIORITY$2).map(normalizeSeniority);
+  return [...new Set(values)];
+}
+function matchesSeniority(text, seniority) {
+  if (seniority === "senior") return matchesStandaloneSenior(text);
+  const patterns = SENIORITY_PATTERNS[seniority];
+  return patterns ? patterns.some((pattern) => pattern.test(text)) : hasTerm(text, seniority);
+}
+function matchesStandaloneSenior(text) {
+  const seniorMatches = [...text.matchAll(/(^|[^a-z0-9])(senior|sr\.?)([^a-z0-9]|$)/gi)];
+  return seniorMatches.some((match) => {
+    const start = match.index ?? 0;
+    const prefix = text.slice(Math.max(0, start - 10), start + match[1].length).toLowerCase();
+    return !/(semi[\s-]?|mid[\s-]?)$/.test(prefix);
+  });
+}
+function requiredYearsRange(text) {
+  if (/(sin experiencia|no se requiere experiencia|without experience|no experience)/i.test(text)) {
+    return { min: 0, max: 0 };
+  }
+  const matches = [...text.matchAll(/(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*\+?\s*(?:años|anos|years|yrs)/gi)];
+  if (matches.length === 0) return null;
+  const ranges = matches.map((match) => ({
+    min: Number(match[1]),
+    max: Number(match[2] ?? match[1])
+  }));
+  return {
+    min: Math.min(...ranges.map((range) => range.min)),
+    max: Math.max(...ranges.map((range) => range.max))
+  };
+}
+function parseMoney$1(value) {
+  const compact = value.replace(/\s+/g, "");
+  const normalized = compact.includes(",") && !compact.includes(".") ? compact.replace(",", ".") : compact.replace(/[.,]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function parseSalaryRange(value) {
+  const text = value ?? "";
+  const currencyMatch = text.match(/(USD|ARS|EUR|US\$|U\$S|\$)/i);
+  const rawCurrency = currencyMatch?.[1];
+  const currency = rawCurrency ? rawCurrency === "$" ? "ARS" : rawCurrency.replace(/^US\$|^U\$S$/i, "USD").toUpperCase() : void 0;
+  const numbers = [...text.matchAll(/\d[\d.,]*/g)].map((match) => parseMoney$1(match[0])).filter((number) => typeof number === "number");
+  return { currency, min: numbers[0], max: numbers[1] ?? numbers[0] };
+}
+function hasHighSenioritySignal(text) {
+  for (const level of ["lead", "staff", "principal", "senior"]) {
+    if (matchesSeniority(text, level)) return level;
+  }
+  return null;
+}
+function isAvoidMatch(text, term) {
+  const normalized = normalizeSeniority(term);
+  if (normalized === "senior") return matchesSeniority(text, "senior");
+  return hasTerm(text, term);
+}
+function scoreSeniority(text, profile) {
+  const targets = getTargetSeniorities(profile);
+  const positives = [];
+  const negatives = [];
+  const matchedTarget = targets.find((level) => matchesSeniority(text, level));
+  if (matchedTarget) positives.push(`seniority: ${matchedTarget}`);
+  const highSignal = hasHighSenioritySignal(text);
+  const seniorityMaxYears = Math.max(...targets.map((level) => SENIORITY_MAX_YEARS[level] ?? 4));
+  const maxAcceptedYears = typeof profile.experienceYearsMax === "number" ? profile.experienceYearsMax : seniorityMaxYears;
+  const years = requiredYearsRange(text);
+  if (highSignal && !targets.includes(highSignal)) {
+    negatives.push(`seniority alto: ${highSignal}`);
+  }
+  if (years !== null && years.max > maxAcceptedYears) {
+    negatives.push(`experiencia requerida: ${years.max}+ años`);
+  }
+  if (years !== null && typeof profile.experienceYearsMin === "number" && years.max < profile.experienceYearsMin) {
+    negatives.push(`experiencia por debajo del rango: ${years.max} años`);
+  }
+  return {
+    points: (matchedTarget ? 10 : 0) - (negatives.length ? 22 : 0),
+    positives,
+    negatives
+  };
+}
 function scoreOffer(offer, profile) {
   if (!profile) return { score: 50, positives: [], negatives: [] };
   const text = [offer.title, offer.description, ...offer.requirements ?? []].join(" ").toLowerCase();
@@ -7750,25 +7859,46 @@ function scoreOffer(offer, profile) {
     score += 6;
     positives.push("ubicación");
   }
-  for (const bad of profile.avoid ?? []) if (hasTerm(text, bad)) {
+  const seniority = scoreSeniority(text, profile);
+  score += seniority.points;
+  positives.push(...seniority.positives);
+  negatives.push(...seniority.negatives);
+  const offeredSalary = parseSalaryRange(offer.salary);
+  const sameCurrency = !offeredSalary.currency || !profile.salaryCurrency || offeredSalary.currency === profile.salaryCurrency.toUpperCase();
+  if (typeof profile.salaryMin === "number" && typeof offeredSalary.max === "number" && sameCurrency) {
+    if (offeredSalary.max < profile.salaryMin) {
+      score -= 18;
+      negatives.push("salario debajo de pretensión");
+    } else {
+      score += 6;
+      positives.push("salario compatible");
+    }
+  }
+  for (const bad of profile.avoid ?? []) if (isAvoidMatch(text, bad)) {
     score -= 18;
     negatives.push(bad);
   }
   return { score: Math.max(0, Math.min(100, Math.round(score))), positives, negatives };
 }
 const RECOMMENDED_SCORE = 65;
-const DETECTED_SCORE = 35;
 function classifyByScore(score) {
   if (score >= RECOMMENDED_SCORE) return "recomendada";
-  if (score >= DETECTED_SCORE) return "detectada";
-  return "rechazada";
+  return "detectada";
 }
 function normalizeUrl(url) {
   try {
     const u2 = new URL(url);
+    const host = u2.hostname.toLowerCase().replace(/^www\./, "");
+    const path = u2.pathname.toLowerCase().replace(/\/$/, "");
+    const indeedId = u2.searchParams.get("jk");
+    if (host.includes("indeed.") && indeedId) return `${host}/viewjob?jk=${indeedId.toLowerCase()}`;
+    const linkedInId = u2.searchParams.get("currentJobId") ?? u2.searchParams.get("jobId");
+    if (host.includes("linkedin.") && linkedInId) return `${host}/jobs/view/${linkedInId.toLowerCase()}`;
+    const linkedInPathId = path.match(/\/jobs\/view\/(\d+)/)?.[1];
+    if (host.includes("linkedin.") && linkedInPathId) return `${host}/jobs/view/${linkedInPathId}`;
     u2.search = "";
     u2.hash = "";
-    return u2.toString().toLowerCase().replace(/\/$/, "");
+    return `${host}${u2.pathname.toLowerCase().replace(/\/$/, "")}`;
   } catch {
     return url.toLowerCase().trim();
   }
@@ -7827,13 +7957,66 @@ const DEFAULT_AVOID_FILTERS = [
   "Reviews negativos visibles",
   "Zona muy alejada no remota",
   "Inglés superior a B1",
-  "Senior",
+  "Senior 5+ años",
+  "Lead",
+  "Staff",
+  "Principal",
   "G&L GROUP"
 ];
-const DEFAULT_STACK = ["React", "TypeScript", "Angular", "APIs REST", "Jest / React Testing Library"];
+const DEFAULT_STACK = [];
 const DEFAULT_SOFT_SKILLS = ["Trabajo en equipo", "Comunicación con clientes y equipos técnicos", "Adaptabilidad"];
+const DEFAULT_TARGET_SENIORITY$1 = ["Junior", "Semi Senior", "SSR"];
+function parseTargetRoles(value) {
+  return (value ?? "").split(/[,;\n/]+/).map((part) => part.trim()).filter(Boolean);
+}
+function parseDecimal(value) {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function parseMoney(value) {
+  const compact = value.replace(/\s+/g, "");
+  const normalized = compact.includes(",") && !compact.includes(".") ? compact.replace(",", ".") : compact.replace(/[.,]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function parseExperienceYears(value) {
+  const text = value ?? "";
+  const match = text.match(/(\d{1,2}(?:[,.]\d+)?)\s*(?:\+|[-\u2013]\s*(\d{1,2}(?:[,.]\d+)?))?/);
+  if (!match) return {};
+  return {
+    min: parseDecimal(match[1]),
+    max: match[2] ? parseDecimal(match[2]) : void 0
+  };
+}
+function parseSalaryExpectation(value) {
+  const text = value ?? "";
+  const currencyMatch = text.match(/(USD|ARS|EUR|US\$|U\$S|\$)/i);
+  const rawCurrency = currencyMatch?.[1] ?? "USD";
+  const currency = rawCurrency === "$" ? "ARS" : rawCurrency.replace(/^US\$|^U\$S$/i, "USD").toUpperCase();
+  const numbers = [...text.matchAll(/\d[\d.,]*/g)].map((match) => parseMoney(match[0])).filter((number) => typeof number === "number");
+  return { currency, min: numbers[0], max: numbers[1] };
+}
+function formatExperienceYearsRange(profile) {
+  const min = profile.experienceYearsMin;
+  const max = profile.experienceYearsMax;
+  if (typeof min === "number" && typeof max === "number") return min === max ? `${min} años` : `${min}-${max} años`;
+  if (typeof min === "number") return `${min}+ años`;
+  if (typeof max === "number") return `hasta ${max} años`;
+  return profile.experience?.trim() || "No definido";
+}
+function formatSalaryRange(profile) {
+  const parsed = parseSalaryExpectation(profile.salaryExpectation);
+  const currency = profile.salaryCurrency || parsed.currency || "USD";
+  const min = profile.salaryMin;
+  const max = profile.salaryMax;
+  if (typeof min === "number" && typeof max === "number") return min === max ? `${currency} ${min}` : `${currency} ${min}-${max}`;
+  if (typeof min === "number") return `${currency} ${min} como mínimo`;
+  if (typeof max === "number") return `hasta ${currency} ${max}`;
+  return profile.salaryExpectation?.trim() || "No definido";
+}
 const DEFAULT_PROFILE = {
   targetRole: "",
+  targetRoles: [],
   personalInfo: {
     dni: "",
     email: "",
@@ -7842,9 +8025,15 @@ const DEFAULT_PROFILE = {
   },
   mainStack: [...DEFAULT_STACK],
   secondaryStack: [],
+  targetSeniority: [...DEFAULT_TARGET_SENIORITY$1],
+  experienceYearsMin: void 0,
+  experienceYearsMax: void 0,
   experience: "",
   softSkills: [...DEFAULT_SOFT_SKILLS],
-  salaryExpectation: "USD 2000 como mínimo",
+  salaryCurrency: "USD",
+  salaryMin: void 0,
+  salaryMax: void 0,
+  salaryExpectation: "",
   availability: ["Full-time"],
   preferredModality: [],
   preferredLocation: [],
@@ -7853,16 +8042,23 @@ const DEFAULT_PROFILE = {
 };
 const MOCK_PROFILE = {
   targetRole: "Frontend Developer SSR",
+  targetRoles: ["Frontend Developer", "React Developer", "Angular Developer"],
   personalInfo: {
     dni: "",
     email: "",
     phone: "",
     address: ""
   },
-  mainStack: [...DEFAULT_STACK],
+  mainStack: ["React", "TypeScript", "Angular", "APIs REST", "Jest / React Testing Library"],
   secondaryStack: [],
+  targetSeniority: [...DEFAULT_TARGET_SENIORITY$1],
+  experienceYearsMin: 2,
+  experienceYearsMax: 4,
   experience: "2+ años de experiencia en desarrollo frontend",
   softSkills: [...DEFAULT_SOFT_SKILLS],
+  salaryCurrency: "USD",
+  salaryMin: 2e3,
+  salaryMax: 2800,
   salaryExpectation: "USD 2000 como mínimo",
   availability: ["Full-time"],
   preferredModality: ["Remoto", "Híbrido"],
@@ -8197,9 +8393,18 @@ const useStore = create((set, get) => ({
         window.api.getHelpRequests()
       ]);
       const defaultFolder = await window.api.getDefaultWorkFolder();
+      const experienceRange = parseExperienceYears(profile?.experience);
+      const salaryRange = parseSalaryExpectation(profile?.salaryExpectation);
       const loadedProfile = {
         ...DEFAULT_PROFILE,
         ...profile ?? {},
+        targetRoles: profile?.targetRoles?.length ? profile.targetRoles : parseTargetRoles(profile?.targetRole),
+        targetSeniority: profile?.targetSeniority ?? DEFAULT_PROFILE.targetSeniority,
+        experienceYearsMin: profile?.experienceYearsMin ?? experienceRange.min,
+        experienceYearsMax: profile?.experienceYearsMax ?? experienceRange.max,
+        salaryCurrency: profile?.salaryCurrency ?? salaryRange.currency ?? DEFAULT_PROFILE.salaryCurrency,
+        salaryMin: profile?.salaryMin ?? salaryRange.min ?? DEFAULT_PROFILE.salaryMin,
+        salaryMax: profile?.salaryMax ?? salaryRange.max,
         personalInfo: {
           ...DEFAULT_PROFILE.personalInfo,
           ...profile?.personalInfo ?? {}
@@ -8436,7 +8641,7 @@ function ScoreBar({ score, showLabel = true, size = "md" }) {
     showLabel && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-2xs font-bold w-6 text-right tabular-nums", style: { color: c }, children: score })
   ] });
 }
-function pct(value, total) {
+function pct$1(value, total) {
   return total > 0 ? Math.round(value / total * 100) : 0;
 }
 function formatDate(value) {
@@ -8535,8 +8740,8 @@ function QualityPanel({ total, high, mid, low, avgScore }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-bold tabular-nums", style: { color: col.fg }, children: total })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex overflow-hidden rounded-full", style: { height: 6, background: alpha(col.border, 0.22) }, children: parts.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${pct(p2.count, total)}%`, background: p2.color } }, p2.label)) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-2", children: parts.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: p2.label, value: p2.count, accent: p2.color, sub: `${pct(p2.count, total)}%` }, p2.label)) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex overflow-hidden rounded-full", style: { height: 6, background: alpha(col.border, 0.22) }, children: parts.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${pct$1(p2.count, total)}%`, background: p2.color } }, p2.label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-2", children: parts.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: p2.label, value: p2.count, accent: p2.color, sub: `${pct$1(p2.count, total)}%` }, p2.label)) })
   ] });
 }
 function StatusDistribution({ counts, total }) {
@@ -8558,7 +8763,7 @@ function StatusDistribution({ counts, total }) {
       const c = statusCol[status] ?? statusCol.detectada;
       return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[92px_1fr_38px] items-center gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-2xs truncate", style: { color: c.text }, children: label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-full overflow-hidden", style: { height: 5, background: alpha(col.border, 0.18) }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${pct(count, total)}%`, height: "100%", background: c.text, opacity: 0.85 } }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-full overflow-hidden", style: { height: 5, background: alpha(col.border, 0.18) }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: `${pct$1(count, total)}%`, height: "100%", background: c.text, opacity: 0.85 } }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-2xs font-bold text-right tabular-nums", style: { color: col.fg }, children: count })
       ] }, status);
     }) })
@@ -8579,19 +8784,39 @@ function PortalPanel({ offers }) {
   ).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card flex flex-col gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionTitle, { icon: Earth, children: "Portales" }),
-    rows.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xs", style: { color: col.fgMuted }, children: "Sin ofertas cargadas." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2", children: rows.map(([portal, data]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[1fr_42px_42px_42px] items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs truncate font-medium", style: { color: col.fg }, children: portal }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-2xs text-right tabular-nums", style: { color: col.fgMuted }, children: [
-        data.total,
-        " total"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-2xs text-right tabular-nums", style: { color: col.violet }, children: [
-        data.applied,
-        " post."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-2xs text-right tabular-nums font-bold", style: { color: scoreColor(data.avg) }, children: data.avg })
-    ] }, portal)) })
+    rows.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xs", style: { color: col.fgMuted }, children: "Sin ofertas cargadas." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col gap-2.5", children: rows.map(([portal, data]) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex items-center justify-between gap-3 rounded-md px-2.5 py-2",
+        style: { background: alpha(col.raised, 0.34), border: `1px solid ${alpha(col.border, 0.14)}` },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs truncate font-semibold", style: { color: col.fg }, children: portal }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xs mt-0.5", style: { color: col.fgMuted }, children: data.applied > 0 ? `${data.applied} postuladas` : "Sin postulaciones" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 flex-shrink-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(MetricPill, { label: "total", value: data.total, color: col.fgMuted }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(MetricPill, { label: "post.", value: data.applied, color: col.violet }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(MetricPill, { label: "score", value: data.avg, color: scoreColor(data.avg), strong: true })
+          ] })
+        ]
+      },
+      portal
+    )) })
   ] });
+}
+function MetricPill({ label, value, color, strong = false }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "h-9 min-w-[46px] rounded-md px-2 flex flex-col items-center justify-center",
+      style: { background: alpha(color, strong ? 0.12 : 0.07), border: `1px solid ${alpha(color, strong ? 0.28 : 0.16)}` },
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs leading-none tabular-nums font-bold", style: { color }, children: value }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[9px] leading-none mt-1 uppercase", style: { color: alpha(color, 0.82), letterSpacing: 0 }, children: label })
+      ]
+    }
+  );
 }
 function OfferList({ title, offers, empty, icon }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card", children: [
@@ -8700,7 +8925,7 @@ function Dashboard() {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card flex flex-col gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionTitle, { icon: Briefcase, children: "Lectura rapida" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: "Tasa postulacion", value: `${pct(metrics.postuladas, metrics.total)}%`, accent: col.violet }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: "Tasa postulacion", value: `${pct$1(metrics.postuladas, metrics.total)}%`, accent: col.violet }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: "Aprobadas vivas", value: metrics.aprobadas, accent: col.green }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: "Rechazadas", value: metrics.rechazadas, accent: col.fgMuted }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(SmallStat, { label: "Duplicadas", value: metrics.duplicadas, accent: col.muted })
@@ -8899,7 +9124,7 @@ function TagInput({
   const [input, setInput] = reactExports.useState("");
   const tagStyle = TAG_STYLES[variant];
   const add = () => {
-    const parts = input.split(/[,\n]/).map((p2) => p2.trim()).filter(Boolean);
+    const parts = input.split(/[,;\n/]+/).map((p2) => p2.trim()).filter(Boolean);
     if (parts.length === 0) {
       setInput("");
       return;
@@ -8957,6 +9182,159 @@ function TagInput({
     ] })
   ] });
 }
+function FieldHint({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xs mt-1 leading-relaxed", style: { color: col.fgMuted }, children });
+}
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function pct(value, min, max) {
+  if (max === min) return 0;
+  return (value - min) / (max - min) * 100;
+}
+function snapToStep(value, min, step) {
+  const snapped = Math.round((value - min) / step) * step + min;
+  return Number(snapped.toFixed(4));
+}
+function salaryScale(currency, salaryMin, salaryMax) {
+  const normalized = (currency ?? "USD").trim().toUpperCase();
+  const baseMax = normalized === "ARS" ? 5e6 : 1e4;
+  const step = normalized === "ARS" ? 5e4 : 100;
+  const highest = Math.max(salaryMin ?? 0, salaryMax ?? 0, baseMax);
+  return { max: Math.ceil(highest / step) * step, step };
+}
+function formatYears(value) {
+  return Number.isInteger(value) ? `${value} años` : `${value.toFixed(1)} años`;
+}
+function formatMoney(currency, value) {
+  return `${currency || "USD"} ${value.toLocaleString("es-AR")}`;
+}
+function RangeBar({
+  label,
+  minBound,
+  maxBound,
+  step,
+  minValue,
+  maxValue,
+  openMinLabel,
+  openMaxLabel,
+  formatValue,
+  clearMinAtBound = false,
+  clearMaxAtBound = true,
+  onMinChange,
+  onMaxChange
+}) {
+  const shellRef = reactExports.useRef(null);
+  const [dragging, setDragging] = reactExports.useState(null);
+  const rawMin = typeof minValue === "number" ? minValue : minBound;
+  const rawMax = typeof maxValue === "number" ? maxValue : maxBound;
+  const currentMin = clamp(Math.min(rawMin, rawMax), minBound, maxBound);
+  const currentMax = clamp(Math.max(rawMin, rawMax), minBound, maxBound);
+  const start = pct(currentMin, minBound, maxBound);
+  const end = pct(currentMax, minBound, maxBound);
+  const style = {
+    "--range-start": `${start}%`,
+    "--range-end": `${end}%`
+  };
+  const valueFromClientX = (clientX) => {
+    const rect = shellRef.current?.getBoundingClientRect();
+    if (!rect) return minBound;
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return clamp(snapToStep(minBound + ratio * (maxBound - minBound), minBound, step), minBound, maxBound);
+  };
+  const updateMin = (value) => {
+    const next = clamp(Math.min(value, currentMax), minBound, maxBound);
+    onMinChange(clearMinAtBound && next === minBound ? void 0 : next);
+  };
+  const updateMax = (value) => {
+    const next = clamp(Math.max(value, currentMin), minBound, maxBound);
+    onMaxChange(clearMaxAtBound && next === maxBound ? void 0 : next);
+  };
+  const updateHandle = (handle, value) => {
+    if (handle === "min") updateMin(value);
+    else updateMax(value);
+  };
+  const handleShellPointerDown = (clientX) => {
+    const next = valueFromClientX(clientX);
+    const handle = Math.abs(next - currentMin) <= Math.abs(next - currentMax) ? "min" : "max";
+    updateHandle(handle, next);
+  };
+  const handleKeyDown = (handle, key) => {
+    const current = handle === "min" ? currentMin : currentMax;
+    if (key === "ArrowLeft" || key === "ArrowDown") updateHandle(handle, current - step);
+    if (key === "ArrowRight" || key === "ArrowUp") updateHandle(handle, current + step);
+    if (key === "Home") updateHandle(handle, minBound);
+    if (key === "End") updateHandle(handle, maxBound);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "range-field", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "label", style: { marginBottom: 0 }, children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "range-values", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: typeof minValue === "number" ? formatValue(currentMin) : openMinLabel ?? formatValue(currentMin) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "range-separator", children: "-" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: typeof maxValue === "number" ? formatValue(currentMax) : openMaxLabel ?? formatValue(currentMax) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: shellRef,
+        className: "range-shell",
+        style,
+        onPointerDown: (e) => {
+          if (!(e.target instanceof HTMLElement) || !e.target.classList.contains("range-handle")) {
+            handleShellPointerDown(e.clientX);
+          }
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "range-track" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: `range-handle ${dragging === "min" ? "dragging" : ""}`,
+              style: { left: `${start}%` },
+              "aria-label": `${label} minimo`,
+              onKeyDown: (e) => handleKeyDown("min", e.key),
+              onPointerDown: (e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDragging("min");
+              },
+              onPointerMove: (e) => {
+                if (dragging === "min") updateMin(valueFromClientX(e.clientX));
+              },
+              onPointerUp: () => setDragging(null),
+              onPointerCancel: () => setDragging(null)
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              className: `range-handle ${dragging === "max" ? "dragging" : ""}`,
+              style: { left: `${end}%` },
+              "aria-label": `${label} maximo`,
+              onKeyDown: (e) => handleKeyDown("max", e.key),
+              onPointerDown: (e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDragging("max");
+              },
+              onPointerMove: (e) => {
+                if (dragging === "max") updateMax(valueFromClientX(e.clientX));
+              },
+              onPointerUp: () => setDragging(null),
+              onPointerCancel: () => setDragging(null)
+            }
+          )
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "range-scale", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatValue(minBound) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatValue(maxBound) })
+    ] })
+  ] });
+}
 function Profile() {
   const profile = useStore((s) => s.profile);
   const settings = useStore((s) => s.settings);
@@ -8965,7 +9343,15 @@ function Profile() {
   const showNotification = useStore((s) => s.showNotification);
   const [form, setForm] = reactExports.useState({ ...profile });
   const [portals, setPortals] = reactExports.useState(settings.portals ?? []);
+  reactExports.useEffect(() => {
+    setForm({ ...profile });
+  }, [profile]);
+  reactExports.useEffect(() => {
+    setPortals(settings.portals ?? []);
+  }, [settings.portals]);
   const set = (key, value) => setForm((f2) => ({ ...f2, [key]: value }));
+  const setTargetRoles = (roles) => setForm((f2) => ({ ...f2, targetRoles: roles, targetRole: roles.join(", ") }));
+  const currentSalaryScale = salaryScale(form.salaryCurrency, form.salaryMin, form.salaryMax);
   const setPersonalInfo = (key, value) => setForm((f2) => ({
     ...f2,
     personalInfo: {
@@ -8974,7 +9360,12 @@ function Profile() {
     }
   }));
   const save = async () => {
-    let next = { ...form };
+    let next = {
+      ...form,
+      targetRole: (form.targetRoles ?? []).join(", "),
+      experience: formatExperienceYearsRange(form),
+      salaryExpectation: formatSalaryRange(form)
+    };
     if (next.cvPath && !next.cvText) {
       const res = await window.api.readPdfFromPath(next.cvPath);
       if (res.success && res.text) {
@@ -8993,7 +9384,7 @@ function Profile() {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "label", style: { marginBottom: "0.2rem" }, children: "Configuración" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "page-title", style: { color: col.fg }, children: "Perfil" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xs mt-0.5", style: { color: col.fgMuted }, children: "Define cómo se puntúan las ofertas para vos" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xs mt-0.5", style: { color: col.fgMuted }, children: "Define qué busca Cowork, qué guarda para revisar y qué descarta." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "btn-primary flex-shrink-0", onClick: save, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Save, { size: 13 }),
@@ -9004,30 +9395,47 @@ function Profile() {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "card flex flex-col gap-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "section-label", style: { marginBottom: 0 }, children: "Identidad" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "label", children: "Rol objetivo" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TagInput,
+            {
+              label: "Roles objetivo",
+              values: form.targetRoles ?? [],
+              onChange: setTargetRoles,
+              variant: "primary",
+              placeholder: "Frontend Developer, React Developer, Angular Developer..."
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(FieldHint, { children: "Títulos de puesto que Cowork usa como búsquedas base. El stack y el seniority generan variantes encima de estos roles." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            TagInput,
+            {
+              label: "Seniority buscado",
+              values: form.targetSeniority ?? [],
+              onChange: (v2) => set("targetSeniority", v2),
+              variant: "preference",
+              placeholder: "Junior, Semi Senior, SSR..."
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(FieldHint, { children: "Se combina con el rol para probar variantes como SSR, Semi Senior, Mid-level o Junior." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              RangeBar,
               {
-                className: "input",
-                value: form.targetRole,
-                onChange: (e) => set("targetRole", e.target.value),
-                placeholder: "Ej: Frontend Developer SSR"
+                label: "Años de experiencia",
+                minBound: 0,
+                maxBound: 12,
+                step: 0.5,
+                minValue: form.experienceYearsMin,
+                maxValue: form.experienceYearsMax,
+                openMinLabel: "Sin mínimo",
+                openMaxLabel: "Sin máximo",
+                formatValue: formatYears,
+                clearMinAtBound: true,
+                onMinChange: (value) => set("experienceYearsMin", value),
+                onMaxChange: (value) => set("experienceYearsMax", value)
               }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "label", children: "Experiencia" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "textarea",
-              {
-                className: "input",
-                rows: 2,
-                value: form.experience,
-                onChange: (e) => set("experience", e.target.value),
-                placeholder: "Ej: 2+ años en desarrollo frontend con React y TypeScript"
-              }
-            )
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(FieldHint, { children: "Cowork lo usa como criterio explícito al evaluar ofertas que piden años obligatorios." })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             TagInput,
@@ -9039,17 +9447,39 @@ function Profile() {
               placeholder: "Trabajo en equipo, comunicación, adaptabilidad…"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "label", children: "Pretensión salarial" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "input",
-                value: form.salaryExpectation ?? "",
-                onChange: (e) => set("salaryExpectation", e.target.value),
-                placeholder: "USD 2000 como mínimo"
-              }
-            )
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-end gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                RangeBar,
+                {
+                  label: "Pretensión salarial",
+                  minBound: 0,
+                  maxBound: currentSalaryScale.max,
+                  step: currentSalaryScale.step,
+                  minValue: form.salaryMin,
+                  maxValue: form.salaryMax,
+                  openMinLabel: "Sin mínimo",
+                  openMaxLabel: "Sin máximo",
+                  formatValue: (value) => formatMoney(form.salaryCurrency ?? "USD", value),
+                  clearMinAtBound: true,
+                  onMinChange: (value) => set("salaryMin", value),
+                  onMaxChange: (value) => set("salaryMax", value)
+                }
+              ) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: 84 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "label", children: "Moneda" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    className: "input",
+                    value: form.salaryCurrency ?? "USD",
+                    onChange: (e) => set("salaryCurrency", e.target.value.toUpperCase()),
+                    placeholder: "USD"
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(FieldHint, { children: "Si dejás el máximo vacío, se interpreta como mínimo aceptado." })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             TagInput,
@@ -9260,6 +9690,7 @@ function OfferCard({ offer }) {
   const canApprove = ["recomendada", "detectada"].includes(offer.status);
   const canReject = ["recomendada", "detectada", "aprobada", "pendiente_manual"].includes(offer.status);
   const canMarkApplied = !["postulada", "duplicada"].includes(offer.status);
+  const canRestore = offer.status === "rechazada";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
@@ -9409,6 +9840,15 @@ function OfferCard({ offer }) {
                     style: { minHeight: 28, padding: "0 0.75rem", fontSize: "var(--text-2xs)" },
                     onClick: () => updateOffer(offer.id, { status: "recomendada" }),
                     children: "Desaprobar"
+                  }
+                ),
+                canRestore && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    className: "btn-secondary",
+                    style: { minHeight: 28, padding: "0 0.75rem", fontSize: "var(--text-2xs)" },
+                    onClick: () => updateOffer(offer.id, { status: "detectada" }),
+                    children: "Restaurar a revisión"
                   }
                 ),
                 canMarkApplied && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -10211,16 +10651,21 @@ const DEFAULT_AVOID = [
   "Reviews negativos visibles",
   "Zona muy alejada no remota",
   "Inglés superior a B1",
-  "Senior",
+  "Senior 5+ años",
+  "Lead",
+  "Staff",
+  "Principal",
   "G&L GROUP"
 ];
+const DEFAULT_TARGET_SENIORITY = ["Junior", "Semi Senior", "SSR"];
 function buildDefaultSearchInstructions(portals, profile) {
-  const portal = portals.length ? portals.join(", ") : "LinkedIn, Bumeran, GetOnBoard";
-  const targetRole = profile.targetRole || "Frontend Developer / React Developer / Angular Developer / TypeScript Developer";
-  const experience = profile.experience || "Frontend Developer con 2+ años de experiencia construyendo aplicaciones web con React, TypeScript y Angular en entornos enterprise, gubernamentales y freelance.";
-  const skills = listOrFallback(profile.mainStack, "React, TypeScript, Angular, APIs REST, Jest / React Testing Library");
+  const portal = portals.length ? portals.join(", ") : "No definido";
+  const targetRole = listOrFallback(profile.targetRoles, profile.targetRole || "No definido");
+  const targetSeniority = listOrFallback(profile.targetSeniority, DEFAULT_TARGET_SENIORITY.join(", "));
+  const skills = listOrFallback(profile.mainStack, "No definido");
   const softSkills = listOrFallback(profile.softSkills, "Trabajo en equipo, comunicación con clientes y equipos técnicos, adaptabilidad");
-  const salaryExpectation = profile.salaryExpectation || "USD 2000 como mínimo";
+  const experienceYears = formatExperienceYearsRange(profile);
+  const salaryExpectation = formatSalaryRange(profile);
   const modality = listOrFallback(profile.preferredModality, "híbrida (solo si es en Buenos Aires) / remota");
   const availability = listOrFallback(profile.availability, "full-time");
   const location = listOrFallback(profile.preferredLocation, "Buenos Aires, Argentina");
@@ -10235,8 +10680,9 @@ sin saltearte pasos, y reportá cada acción realizada.
 
 ## MI PERFIL
 
-- **Rol objetivo**: ${targetRole}
-- **Experiencia laboral**: ${experience}
+- **Roles objetivo**: ${targetRole}
+- **Seniority buscado**: ${targetSeniority}
+- **Años de experiencia buscados**: ${experienceYears}
 - **Competencias clave**: ${skills}
 - **Soft skills**: ${softSkills}
 - **Pretensión salarial**: ${salaryExpectation}
@@ -10266,13 +10712,40 @@ Ejecutá en orden:
 2. **Buscar ofertas**: ingresá búsquedas en paralelo (hasta 4 simultáneas)
    usando keywords del rol. Ejemplo si soy "Asesor Comercial":
    "Asesor Comercial", "Ejecutivo de Ventas", "Vendedor B2B", "Account Manager".
+   Abrí varias búsquedas, pero navegá los resultados con ritmo humano: no abras muchas ofertas o páginas en ráfaga.
+
+   Cobertura obligatoria:
+   - Si Roles objetivo o portales figuran como "No definido", no inicies la búsqueda. Pedí al usuario que complete Perfil/Portales en JobPilot y esperá.
+   - Armá la estrategia de búsqueda desde el perfil completo: roles objetivo, stack, seniority, años de experiencia, modalidad y ubicación.
+   - A partir de esas palabras clave, generá variantes adicionales en español e inglés: sinónimos, títulos equivalentes, combinaciones con tecnologías del stack y términos de seniority. No te limites a las keywords literales cargadas.
+   - Usá el seniority buscado para generar variantes de búsqueda. Por ejemplo, si el perfil indica SSR o Semi Senior, probá variantes como "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level" y "Mid".
+   - Separá mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (títulos equivalentes o tecnologías cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
+   - Priorizá profundidad sobre velocidad. Antes de concluir una búsqueda normal, revisá como mínimo 80-120 tarjetas/resultados por portal y abrí/lee 40-60 avisos que parezcan mínimamente cercanos al perfil. Si hay menos resultados disponibles, indicá exactamente dónde se agotaron.
+   - Para cada keyword principal, revisá al menos 3 páginas completas de resultados. No uses "saturación" para cortar antes de página 3 salvo bloqueo técnico real, captcha, login, rate limit o ausencia total de resultados.
+   - Recién podés declarar saturación cuando hayas revisado al menos 5 queries distintas y 100 tarjetas/resultados totales, y más del 70% de los resultados nuevos sean repetidos o claramente fuera de perfil por título/empresa ya vistos.
+   - No alcanza con abrir 20-30 avisos en total. Si encontrás pocas compatibles, seguí buscando más lento y más profundo: más páginas, más variantes, otros portales configurados o filtros menos restrictivos del portal que no contradigan el perfil. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
+   - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si después de ampliar hay menos de 10 compatibles, presentá las que haya y explicá la cobertura realizada.
+   - Avanzá lento para evitar rate limit: esperá entre 8 y 15 segundos entre abrir resultados, cambiar de página, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aumentá la espera. Es preferible tardar más y revisar mucho que hacer una búsqueda superficial.
+   - No abras más de 2 ofertas del mismo portal al mismo tiempo. Si hay señales de bloqueo, pasá inmediatamente a navegación secuencial.
+   - Usá todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e Híbrido, NO filtres solo remoto.
+   - No uses filtros más restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qué y hagas también una búsqueda amplia.
+   - En LinkedIn, revisá tanto búsquedas por keywords como la feed personalizada /jobs/search-results/ cuando esté disponible.
+   - Buscá variantes en inglés y español derivadas de los roles objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otros roles, adaptá las variantes a esos roles.
+   - Al presentar resultados, indicá qué keywords, filtros y secciones revisaste, cuántas tarjetas/resultados escaneaste, cuántos avisos abriste/leíste completos, cuántas páginas recorriste por query y cuántos quedaron pendientes por error de carga.
+   - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Informá exactamente páginas/resultados revisados, qué quedó sin revisar y llamá a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
 
 3. **Evaluar ofertas**: por cada resultado, abrí la oferta, leé descripción,
    evaluá según mis criterios. Asigná score 1-10.
+   - Guardá en JobPilot solo ofertas compatibles o dudosas que valga la pena que el usuario revise.
+   - No guardes en JobPilot ofertas que violen un descarte duro o que claramente no interesan. Esas ofertas van solo en el resumen como "descartadas", con motivo breve.
+   - Si una oferta no carga o no podés leer la descripción completa, no la descartes por falta de información. Reintentá al menos 2 veces con espera; si sigue fallando, registrala en el resumen como pendiente por error de carga con URL, portal y reintentos.
+   - Si una oferta pide inglés Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique explícitamente que acepta ese nivel.
+   - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
 
 4. **STOP en paso 4 — presentar top 10** en tabla con columnas:
    Puesto | Empresa | Lugar | Salario | Modalidad | Score | Razón del match
    Mostrame y esperá mi confirmación.
+   Antes de la tabla, incluí un resumen de cobertura: portales revisados, queries usadas, páginas/resultados revisados, cantidad de ofertas guardadas, descartadas no guardadas y pendientes por bloqueo.
 
 5. **Esperar instrucción**:
    - "confirmar todos" → postular en orden
@@ -10282,10 +10755,12 @@ Ejecutá en orden:
 ## REGLAS DURAS
 
 - NUNCA postular sin confirmación humana en paso 4
+- En modo búsqueda, no prometas postular ni tomes "confirmar todos" como aprobación de postulación. La confirmación solo sirve para guardar o revisar ofertas; postular ocurre después, en modo postulación y con aprobación en JobPilot.
 - NUNCA cartas genéricas, siempre personalizadas
 - Si falla 2 veces, salteala y registrala como error
 - Si pide test técnico antes de postular, marcala como "pendiente test"
 - NUNCA reveles info personal a terceros fuera del portal
+- Ante CAPTCHA, verificación humana, rate limit persistente, login o 2FA, llamá a request_human_help con motivo y URL, pausá y esperá al usuario.
 - NO postules a G&L GROUP`;
 }
 const DEFAULT_APP_INSTRUCTIONS = `## PLAN DE TAREAS

@@ -103,11 +103,12 @@ Cowork debe llamar siempre:
 
 `get_profile` devuelve el perfil completo, incluyendo:
 
-- rol objetivo
+- roles objetivo
+- seniority buscado
 - stack
-- experiencia
+- rango de anos de experiencia
 - soft skills
-- pretension salarial
+- rango de pretension salarial
 - disponibilidad
 - modalidad y ubicacion preferidas
 - filtros de exclusion
@@ -126,8 +127,8 @@ Los datos personales existen para completar formularios si el portal los pide. N
 | `get_instructions` | Devuelve instrucciones para busqueda o postulacion. |
 | `list_offers` | Lista ofertas por estado. |
 | `list_approved_offers` | Lista solo ofertas aprobadas para postular. |
-| `add_offer` | Registra una oferta encontrada por Cowork. |
-| `add_offers` | Registra varias ofertas encontradas por Cowork. |
+| `add_offer` | Registra una oferta compatible o dudosa encontrada por Cowork. |
+| `add_offers` | Registra varias ofertas compatibles o dudosas encontradas por Cowork. |
 | `mark_offer_applied` | Marca una oferta como postulada. |
 | `register_error` | Registra error, pendiente manual o pendiente test. |
 | `request_human_help` | Pide ayuda al usuario desde JobPilot. |
@@ -138,6 +139,7 @@ Los datos personales existen para completar formularios si el portal los pide. N
 
 - Cowork nunca debe postular sin aprobacion explicita en JobPilot.
 - Cowork debe usar `list_approved_offers` para postular.
+- Cowork no debe guardar ofertas descartadas por criterios duros; esas van solo en el resumen de cobertura.
 - Cowork debe pedir carta o mensaje personalizado al usuario antes de enviar una postulacion que la requiera.
 - Si una oferta ya existe, `add_offer` y `add_offers` intentan detectarla como duplicada.
 - Si la oferta ya esta postulada y Cowork intenta agregarla otra vez, el MCP responde que ya estaba cargada/postulada.
@@ -152,7 +154,21 @@ El scoring va de 0 a 100:
 - El stack suma como maximo 30 puntos.
 - Modalidad preferida suma 6 puntos.
 - Ubicacion preferida suma 6 puntos.
+- Seniority compatible suma 10 puntos.
+- Seniority demasiado alto o anos requeridos por encima del rango maximo del perfil resta 22 puntos.
+- Anos requeridos por debajo del rango minimo del perfil tambien penalizan.
+- Salario publicado compatible suma 6 puntos; salario publicado por debajo de la pretension resta 18 puntos.
 - Cada filtro de exclusion encontrado resta 18 puntos.
+
+El seniority buscado vive como campo explicito del perfil. `Semi Senior`,
+`Semi-Senior` y `SSR` se tratan como equivalentes, y una exclusion generica
+`Senior` no penaliza automaticamente ofertas `Semi Senior`.
+
+Los anos de experiencia y la pretension salarial se guardan como rangos
+estructurados. Los campos de texto `experience` y `salaryExpectation` se
+mantienen por compatibilidad, pero se derivan de los rangos al guardar.
+Si faltan roles objetivo o portales, `get_instructions` debe frenar la busqueda
+y pedir completar Perfil/Portales en vez de inventar defaults.
 
 Clasificacion:
 
