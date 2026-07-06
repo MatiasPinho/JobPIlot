@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Plus, X, Save, FileText, Upload, Loader2, ShieldAlert } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { col, alpha } from '../lib/theme'
+import { formatExperienceYearsRange, formatSalaryRange } from '../lib/mockData'
 import type { UserProfile } from '../types'
 
 function CvDropZone({ value, hasText, onChange }: {
@@ -114,7 +115,7 @@ function TagInput({
 
   const add = () => {
     // Separa por coma o salto de línea para crear varios tags de una vez
-    const parts = input.split(/[,\n]/).map((p) => p.trim()).filter(Boolean)
+    const parts = input.split(/[,;\n/]+/).map((p) => p.trim()).filter(Boolean)
     if (parts.length === 0) { setInput(''); return }
     const next = [...values]
     for (const p of parts) if (!next.includes(p)) next.push(p)
@@ -171,6 +172,184 @@ function TagInput({
   )
 }
 
+function FieldHint({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-2xs mt-1 leading-relaxed" style={{ color: col.fgMuted }}>
+      {children}
+    </p>
+  )
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function pct(value: number, min: number, max: number): number {
+  if (max === min) return 0
+  return ((value - min) / (max - min)) * 100
+}
+
+function snapToStep(value: number, min: number, step: number): number {
+  const snapped = Math.round((value - min) / step) * step + min
+  return Number(snapped.toFixed(4))
+}
+
+function salaryScale(currency: string | undefined, salaryMin: number | undefined, salaryMax: number | undefined): { max: number; step: number } {
+  const normalized = (currency ?? 'USD').trim().toUpperCase()
+  const baseMax = normalized === 'ARS' ? 5000000 : 10000
+  const step = normalized === 'ARS' ? 50000 : 100
+  const highest = Math.max(salaryMin ?? 0, salaryMax ?? 0, baseMax)
+  return { max: Math.ceil(highest / step) * step, step }
+}
+
+function formatYears(value: number): string {
+  return Number.isInteger(value) ? `${value} años` : `${value.toFixed(1)} años`
+}
+
+function formatMoney(currency: string, value: number): string {
+  return `${currency || 'USD'} ${value.toLocaleString('es-AR')}`
+}
+
+function RangeBar({
+  label,
+  minBound,
+  maxBound,
+  step,
+  minValue,
+  maxValue,
+  openMinLabel,
+  openMaxLabel,
+  formatValue,
+  clearMinAtBound = false,
+  clearMaxAtBound = true,
+  onMinChange,
+  onMaxChange
+}: {
+  label: string
+  minBound: number
+  maxBound: number
+  step: number
+  minValue?: number
+  maxValue?: number
+  openMinLabel?: string
+  openMaxLabel?: string
+  formatValue: (value: number) => string
+  clearMinAtBound?: boolean
+  clearMaxAtBound?: boolean
+  onMinChange: (value: number | undefined) => void
+  onMaxChange: (value: number | undefined) => void
+}) {
+  const shellRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState<'min' | 'max' | null>(null)
+  const rawMin = typeof minValue === 'number' ? minValue : minBound
+  const rawMax = typeof maxValue === 'number' ? maxValue : maxBound
+  const currentMin = clamp(Math.min(rawMin, rawMax), minBound, maxBound)
+  const currentMax = clamp(Math.max(rawMin, rawMax), minBound, maxBound)
+  const start = pct(currentMin, minBound, maxBound)
+  const end = pct(currentMax, minBound, maxBound)
+  const style = {
+    '--range-start': `${start}%`,
+    '--range-end': `${end}%`
+  } as CSSProperties
+
+  const valueFromClientX = (clientX: number): number => {
+    const rect = shellRef.current?.getBoundingClientRect()
+    if (!rect) return minBound
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1)
+    return clamp(snapToStep(minBound + ratio * (maxBound - minBound), minBound, step), minBound, maxBound)
+  }
+
+  const updateMin = (value: number) => {
+    const next = clamp(Math.min(value, currentMax), minBound, maxBound)
+    onMinChange(clearMinAtBound && next === minBound ? undefined : next)
+  }
+
+  const updateMax = (value: number) => {
+    const next = clamp(Math.max(value, currentMin), minBound, maxBound)
+    onMaxChange(clearMaxAtBound && next === maxBound ? undefined : next)
+  }
+
+  const updateHandle = (handle: 'min' | 'max', value: number) => {
+    if (handle === 'min') updateMin(value)
+    else updateMax(value)
+  }
+
+  const handleShellPointerDown = (clientX: number) => {
+    const next = valueFromClientX(clientX)
+    const handle = Math.abs(next - currentMin) <= Math.abs(next - currentMax) ? 'min' : 'max'
+    updateHandle(handle, next)
+  }
+
+  const handleKeyDown = (handle: 'min' | 'max', key: string) => {
+    const current = handle === 'min' ? currentMin : currentMax
+    if (key === 'ArrowLeft' || key === 'ArrowDown') updateHandle(handle, current - step)
+    if (key === 'ArrowRight' || key === 'ArrowUp') updateHandle(handle, current + step)
+    if (key === 'Home') updateHandle(handle, minBound)
+    if (key === 'End') updateHandle(handle, maxBound)
+  }
+
+  return (
+    <div className="range-field">
+      <div className="flex items-center justify-between gap-3">
+        <div className="label" style={{ marginBottom: 0 }}>{label}</div>
+        <div className="range-values">
+          <span>{typeof minValue === 'number' ? formatValue(currentMin) : (openMinLabel ?? formatValue(currentMin))}</span>
+          <span className="range-separator">-</span>
+          <span>{typeof maxValue === 'number' ? formatValue(currentMax) : (openMaxLabel ?? formatValue(currentMax))}</span>
+        </div>
+      </div>
+      <div
+        ref={shellRef}
+        className="range-shell"
+        style={style}
+        onPointerDown={(e) => {
+          if (!(e.target instanceof HTMLElement) || !e.target.classList.contains('range-handle')) {
+            handleShellPointerDown(e.clientX)
+          }
+        }}
+      >
+        <div className="range-track" />
+        <button
+          type="button"
+          className={`range-handle ${dragging === 'min' ? 'dragging' : ''}`}
+          style={{ left: `${start}%` }}
+          aria-label={`${label} minimo`}
+          onKeyDown={(e) => handleKeyDown('min', e.key)}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            setDragging('min')
+          }}
+          onPointerMove={(e) => {
+            if (dragging === 'min') updateMin(valueFromClientX(e.clientX))
+          }}
+          onPointerUp={() => setDragging(null)}
+          onPointerCancel={() => setDragging(null)}
+        />
+        <button
+          type="button"
+          className={`range-handle ${dragging === 'max' ? 'dragging' : ''}`}
+          style={{ left: `${end}%` }}
+          aria-label={`${label} maximo`}
+          onKeyDown={(e) => handleKeyDown('max', e.key)}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            setDragging('max')
+          }}
+          onPointerMove={(e) => {
+            if (dragging === 'max') updateMax(valueFromClientX(e.clientX))
+          }}
+          onPointerUp={() => setDragging(null)}
+          onPointerCancel={() => setDragging(null)}
+        />
+      </div>
+      <div className="range-scale">
+        <span>{formatValue(minBound)}</span>
+        <span>{formatValue(maxBound)}</span>
+      </div>
+    </div>
+  )
+}
+
 export function Profile() {
   const profile          = useStore((s) => s.profile)
   const settings         = useStore((s) => s.settings)
@@ -181,8 +360,21 @@ export function Profile() {
   const [form, setForm] = useState<UserProfile>({ ...profile })
   const [portals, setPortals] = useState<string[]>(settings.portals ?? [])
 
+  useEffect(() => {
+    setForm({ ...profile })
+  }, [profile])
+
+  useEffect(() => {
+    setPortals(settings.portals ?? [])
+  }, [settings.portals])
+
   const set = <K extends keyof UserProfile>(key: K, value: UserProfile[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  const setTargetRoles = (roles: string[]) =>
+    setForm((f) => ({ ...f, targetRoles: roles, targetRole: roles.join(', ') }))
+
+  const currentSalaryScale = salaryScale(form.salaryCurrency, form.salaryMin, form.salaryMax)
 
   const setPersonalInfo = (key: keyof UserProfile['personalInfo'], value: string) =>
     setForm((f) => ({
@@ -194,7 +386,12 @@ export function Profile() {
     }))
 
   const save = async () => {
-    let next = { ...form }
+    let next = {
+      ...form,
+      targetRole: (form.targetRoles ?? []).join(', '),
+      experience: formatExperienceYearsRange(form),
+      salaryExpectation: formatSalaryRange(form)
+    }
     if (next.cvPath && !next.cvText) {
       const res = await window.api.readPdfFromPath(next.cvPath)
       if (res.success && res.text) {
@@ -219,7 +416,7 @@ export function Profile() {
           <p className="label" style={{ marginBottom: '0.2rem' }}>Configuración</p>
           <h1 className="page-title" style={{ color: col.fg }}>Perfil</h1>
           <p className="text-2xs mt-0.5" style={{ color: col.fgMuted }}>
-            Define cómo se puntúan las ofertas para vos
+            Define qué busca Cowork, qué guarda para revisar y qué descarta.
           </p>
         </div>
         <button className="btn-primary flex-shrink-0" onClick={save}>
@@ -237,24 +434,44 @@ export function Profile() {
           {/* Identity */}
           <div className="card flex flex-col gap-4">
             <div className="section-label" style={{ marginBottom: 0 }}>Identidad</div>
-            <div>
-              <div className="label">Rol objetivo</div>
-              <input
-                className="input"
-                value={form.targetRole}
-                onChange={(e) => set('targetRole', e.target.value)}
-                placeholder="Ej: Frontend Developer SSR"
+            <TagInput
+              label="Roles objetivo"
+              values={form.targetRoles ?? []}
+              onChange={setTargetRoles}
+              variant="primary"
+              placeholder="Frontend Developer, React Developer, Angular Developer..."
+            />
+            <FieldHint>
+              Títulos de puesto que Cowork usa como búsquedas base. El stack y el seniority generan variantes encima de estos roles.
+            </FieldHint>
+            <TagInput
+              label="Seniority buscado"
+              values={form.targetSeniority ?? []}
+              onChange={(v) => set('targetSeniority', v)}
+              variant="preference"
+              placeholder="Junior, Semi Senior, SSR..."
+            />
+            <FieldHint>
+              Se combina con el rol para probar variantes como SSR, Semi Senior, Mid-level o Junior.
+            </FieldHint>
+            <div className="flex flex-col gap-2">
+              <RangeBar
+                label="Años de experiencia"
+                minBound={0}
+                maxBound={12}
+                step={0.5}
+                minValue={form.experienceYearsMin}
+                maxValue={form.experienceYearsMax}
+                openMinLabel="Sin mínimo"
+                openMaxLabel="Sin máximo"
+                formatValue={formatYears}
+                clearMinAtBound
+                onMinChange={(value) => set('experienceYearsMin', value)}
+                onMaxChange={(value) => set('experienceYearsMax', value)}
               />
-            </div>
-            <div>
-              <div className="label">Experiencia</div>
-              <textarea
-                className="input"
-                rows={2}
-                value={form.experience}
-                onChange={(e) => set('experience', e.target.value)}
-                placeholder="Ej: 2+ años en desarrollo frontend con React y TypeScript"
-              />
+              <FieldHint>
+                Cowork lo usa como criterio explícito al evaluar ofertas que piden años obligatorios.
+              </FieldHint>
             </div>
             <TagInput
               label="Soft skills"
@@ -263,14 +480,37 @@ export function Profile() {
               variant="secondary"
               placeholder="Trabajo en equipo, comunicación, adaptabilidad…"
             />
-            <div>
-              <div className="label">Pretensión salarial</div>
-              <input
-                className="input"
-                value={form.salaryExpectation ?? ''}
-                onChange={(e) => set('salaryExpectation', e.target.value)}
-                placeholder="USD 2000 como mínimo"
-              />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <RangeBar
+                    label="Pretensión salarial"
+                    minBound={0}
+                    maxBound={currentSalaryScale.max}
+                    step={currentSalaryScale.step}
+                    minValue={form.salaryMin}
+                    maxValue={form.salaryMax}
+                    openMinLabel="Sin mínimo"
+                    openMaxLabel="Sin máximo"
+                    formatValue={(value) => formatMoney(form.salaryCurrency ?? 'USD', value)}
+                    clearMinAtBound
+                    onMinChange={(value) => set('salaryMin', value)}
+                    onMaxChange={(value) => set('salaryMax', value)}
+                  />
+                </div>
+                <div style={{ width: 84 }}>
+                  <div className="label">Moneda</div>
+                  <input
+                    className="input"
+                    value={form.salaryCurrency ?? 'USD'}
+                    onChange={(e) => set('salaryCurrency', e.target.value.toUpperCase())}
+                    placeholder="USD"
+                  />
+                </div>
+              </div>
+              <FieldHint>
+                Si dejás el máximo vacío, se interpreta como mínimo aceptado.
+              </FieldHint>
             </div>
             <TagInput
               label="Disponibilidad"

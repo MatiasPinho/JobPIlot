@@ -7,16 +7,85 @@ export const DEFAULT_AVOID_FILTERS = [
   'Reviews negativos visibles',
   'Zona muy alejada no remota',
   'Inglés superior a B1',
-  'Senior',
+  'Senior 5+ años',
+  'Lead',
+  'Staff',
+  'Principal',
   'G&L GROUP'
 ]
 
-export const DEFAULT_STACK = ['React', 'TypeScript', 'Angular', 'APIs REST', 'Jest / React Testing Library']
+export const DEFAULT_STACK: string[] = []
 export const DEFAULT_SOFT_SKILLS = ['Trabajo en equipo', 'Comunicación con clientes y equipos técnicos', 'Adaptabilidad']
+export const DEFAULT_TARGET_SENIORITY = ['Junior', 'Semi Senior', 'SSR']
+
+export function parseTargetRoles(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(/[,;\n/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+function parseDecimal(value: string): number | undefined {
+  const parsed = Number(value.replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseMoney(value: string): number | undefined {
+  const compact = value.replace(/\s+/g, '')
+  const normalized = compact.includes(',') && !compact.includes('.')
+    ? compact.replace(',', '.')
+    : compact.replace(/[.,]/g, '')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+export function parseExperienceYears(value: string | undefined): { min?: number; max?: number } {
+  const text = value ?? ''
+  const match = text.match(/(\d{1,2}(?:[,.]\d+)?)\s*(?:\+|[-\u2013]\s*(\d{1,2}(?:[,.]\d+)?))?/)
+  if (!match) return {}
+
+  return {
+    min: parseDecimal(match[1]),
+    max: match[2] ? parseDecimal(match[2]) : undefined
+  }
+}
+
+export function parseSalaryExpectation(value: string | undefined): { currency: string; min?: number; max?: number } {
+  const text = value ?? ''
+  const currencyMatch = text.match(/(USD|ARS|EUR|US\$|U\$S|\$)/i)
+  const rawCurrency = currencyMatch?.[1] ?? 'USD'
+  const currency = rawCurrency === '$' ? 'ARS' : rawCurrency.replace(/^US\$|^U\$S$/i, 'USD').toUpperCase()
+  const numbers = [...text.matchAll(/\d[\d.,]*/g)]
+    .map((match) => parseMoney(match[0]))
+    .filter((number): number is number => typeof number === 'number')
+
+  return { currency, min: numbers[0], max: numbers[1] }
+}
+
+export function formatExperienceYearsRange(profile: Pick<UserProfile, 'experienceYearsMin' | 'experienceYearsMax' | 'experience'>): string {
+  const min = profile.experienceYearsMin
+  const max = profile.experienceYearsMax
+  if (typeof min === 'number' && typeof max === 'number') return min === max ? `${min} años` : `${min}-${max} años`
+  if (typeof min === 'number') return `${min}+ años`
+  if (typeof max === 'number') return `hasta ${max} años`
+  return profile.experience?.trim() || 'No definido'
+}
+
+export function formatSalaryRange(profile: Pick<UserProfile, 'salaryCurrency' | 'salaryMin' | 'salaryMax' | 'salaryExpectation'>): string {
+  const parsed = parseSalaryExpectation(profile.salaryExpectation)
+  const currency = profile.salaryCurrency || parsed.currency || 'USD'
+  const min = profile.salaryMin
+  const max = profile.salaryMax
+  if (typeof min === 'number' && typeof max === 'number') return min === max ? `${currency} ${min}` : `${currency} ${min}-${max}`
+  if (typeof min === 'number') return `${currency} ${min} como mínimo`
+  if (typeof max === 'number') return `hasta ${currency} ${max}`
+  return profile.salaryExpectation?.trim() || 'No definido'
+}
 
 /** Perfil base — el usuario completa identidad/stack y conserva filtros seguros */
 export const DEFAULT_PROFILE: UserProfile = {
   targetRole: '',
+  targetRoles: [],
   personalInfo: {
     dni: '',
     email: '',
@@ -25,9 +94,15 @@ export const DEFAULT_PROFILE: UserProfile = {
   },
   mainStack: [...DEFAULT_STACK],
   secondaryStack: [],
+  targetSeniority: [...DEFAULT_TARGET_SENIORITY],
+  experienceYearsMin: undefined,
+  experienceYearsMax: undefined,
   experience: '',
   softSkills: [...DEFAULT_SOFT_SKILLS],
-  salaryExpectation: 'USD 2000 como mínimo',
+  salaryCurrency: 'USD',
+  salaryMin: undefined,
+  salaryMax: undefined,
+  salaryExpectation: '',
   availability: ['Full-time'],
   preferredModality: [],
   preferredLocation: [],
@@ -38,16 +113,23 @@ export const DEFAULT_PROFILE: UserProfile = {
 /** Perfil de ejemplo — solo para el botón "Cargar datos de prueba" en Settings */
 export const MOCK_PROFILE: UserProfile = {
   targetRole: 'Frontend Developer SSR',
+  targetRoles: ['Frontend Developer', 'React Developer', 'Angular Developer'],
   personalInfo: {
     dni: '',
     email: '',
     phone: '',
     address: ''
   },
-  mainStack: [...DEFAULT_STACK],
+  mainStack: ['React', 'TypeScript', 'Angular', 'APIs REST', 'Jest / React Testing Library'],
   secondaryStack: [],
+  targetSeniority: [...DEFAULT_TARGET_SENIORITY],
+  experienceYearsMin: 2,
+  experienceYearsMax: 4,
   experience: '2+ años de experiencia en desarrollo frontend',
   softSkills: [...DEFAULT_SOFT_SKILLS],
+  salaryCurrency: 'USD',
+  salaryMin: 2000,
+  salaryMax: 2800,
   salaryExpectation: 'USD 2000 como mínimo',
   availability: ['Full-time'],
   preferredModality: ['Remoto', 'Híbrido'],

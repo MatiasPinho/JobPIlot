@@ -234,6 +234,102 @@
 
   textarea.input { resize: vertical; min-height: 72px; }
 
+  /* Range bar */
+  .range-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .range-values {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+    color: rgb(var(--c-fg-dim));
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .range-values span {
+    color: rgb(var(--c-fg-dim));
+  }
+
+  .range-values .range-separator {
+    color: rgb(var(--c-muted));
+    font-weight: 500;
+  }
+
+  .range-shell {
+    position: relative;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    --range-start: 0%;
+    --range-end: 100%;
+  }
+
+  .range-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 2px;
+    background:
+      linear-gradient(
+        to right,
+        rgb(var(--c-dim) / 0.7) 0%,
+        rgb(var(--c-dim) / 0.7) var(--range-start),
+        rgb(var(--c-amber) / 0.86) var(--range-start),
+        rgb(var(--c-amber) / 0.86) var(--range-end),
+        rgb(var(--c-dim) / 0.7) var(--range-end),
+        rgb(var(--c-dim) / 0.7) 100%
+      );
+  }
+
+  .range-handle {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgb(var(--c-amber) / 0.78);
+    border-radius: 3px;
+    background: rgb(var(--c-surface));
+    box-shadow: 0 0 0 2px rgb(var(--c-base));
+    cursor: grab;
+    transform: translate(-50%, -50%) rotate(45deg);
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  }
+
+  .range-handle:hover,
+  .range-handle.dragging {
+    background: rgb(var(--c-amber) / 0.18);
+    border-color: rgb(var(--c-amber));
+    box-shadow: 0 0 0 2px rgb(var(--c-base)), 0 0 0 4px rgb(var(--c-amber) / 0.12);
+  }
+
+  .range-handle:active { cursor: grabbing; }
+
+  .range-handle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--c-base)), 0 0 0 5px rgb(var(--c-cream) / 0.18);
+  }
+
+  .range-scale {
+    display: flex;
+    justify-content: space-between;
+    color: rgb(var(--c-muted));
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
   /* ── Labels ── */
   .label {
     font-size: var(--text-2xs);

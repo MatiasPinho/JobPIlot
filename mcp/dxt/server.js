@@ -15466,6 +15466,377 @@ function readJson(file, fallback) {
 function writeJson(file, data) {
   (0, import_fs.writeFileSync)(file, JSON.stringify(data, null, 2), "utf-8");
 }
+function listOrFallback(values, fallback) {
+  return values?.length ? values.join(", ") : fallback;
+}
+function formatExperienceYearsRange(profile) {
+  const min = profile?.experienceYearsMin;
+  const max = profile?.experienceYearsMax;
+  if (typeof min === "number" && typeof max === "number") return min === max ? `${min} a\xF1os` : `${min}-${max} a\xF1os`;
+  if (typeof min === "number") return `${min}+ a\xF1os`;
+  if (typeof max === "number") return `hasta ${max} a\xF1os`;
+  return profile?.experience?.trim() || "No definido";
+}
+function formatSalaryRange(profile) {
+  const currency = profile?.salaryCurrency || "USD";
+  const min = profile?.salaryMin;
+  const max = profile?.salaryMax;
+  if (typeof min === "number" && typeof max === "number") return min === max ? `${currency} ${min}` : `${currency} ${min}-${max}`;
+  if (typeof min === "number") return `${currency} ${min} como m\xEDnimo`;
+  if (typeof max === "number") return `hasta ${currency} ${max}`;
+  return profile?.salaryExpectation?.trim() || "USD 2000 como minimo";
+}
+function portalText(settings) {
+  return settings?.portals?.length ? settings.portals.join(", ") : "No definido";
+}
+var DEFAULT_AVOID = [
+  "MLM",
+  "Ventas a comisi\xF3n pura sin sueldo base",
+  "Inversi\xF3n inicial",
+  "Reviews negativos visibles",
+  "Zona muy alejada no remota",
+  "Ingl\xE9s superior a B1",
+  "Senior 5+ a\xF1os",
+  "Lead",
+  "Staff",
+  "Principal",
+  "G&L GROUP"
+];
+var DEFAULT_TARGET_SENIORITY = ["Junior", "Semi Senior", "SSR"];
+function applyInstructionVariables(text, profile, settings) {
+  const portal = portalText(settings);
+  const role = listOrFallback(profile?.targetRoles, profile?.targetRole || "No definido");
+  return text.replaceAll("{portal_url}", portal).replaceAll("{portal}", portal).replaceAll("{rol}", role).replaceAll("{role}", role).replaceAll("{target_role}", role);
+}
+function buildSearchInstructions(profile, settings) {
+  const portal = portalText(settings);
+  const targetRole = listOrFallback(profile?.targetRoles, profile?.targetRole || "No definido");
+  const targetSeniority = listOrFallback(profile?.targetSeniority, DEFAULT_TARGET_SENIORITY.join(", "));
+  const skills = listOrFallback(profile?.mainStack, "No definido");
+  const softSkills = listOrFallback(profile?.softSkills, "Trabajo en equipo, comunicaci\xF3n con clientes y equipos t\xE9cnicos, adaptabilidad");
+  const experienceYears = formatExperienceYearsRange(profile);
+  const salaryExpectation = formatSalaryRange(profile);
+  const modality = listOrFallback(profile?.preferredModality, "h\xEDbrida (solo si es en Buenos Aires) / remota");
+  const availability = listOrFallback(profile?.availability, "full-time");
+  const location = listOrFallback(profile?.preferredLocation, "Buenos Aires, Argentina");
+  const avoid = (profile?.avoid ?? []).length ? profile.avoid : DEFAULT_AVOID;
+  const avoidLines = avoid.map((item) => `- ${item}`).join("\n");
+  return `## ROL Y OBJETIVO
+
+Sos un agente de b\xFAsqueda de empleo. Tu tarea es ingresar a ${portal}, buscar
+ofertas laborales compatibles con mi perfil, priorizarlas seg\xFAn criterios
+espec\xEDficos y enviar postulaciones en mi nombre. Actu\xE1 con precisi\xF3n,
+sin saltearte pasos, y report\xE1 cada acci\xF3n realizada.
+
+## MI PERFIL
+
+- **Roles objetivo**: ${targetRole}
+- **Seniority buscado**: ${targetSeniority}
+- **A\xF1os de experiencia buscados**: ${experienceYears}
+- **Competencias clave**: ${skills}
+- **Soft skills**: ${softSkills}
+- **Pretensi\xF3n salarial**: ${salaryExpectation}
+- **Modalidad preferida**: ${modality}
+- **Disponibilidad**: ${availability}
+- **Zona de residencia**: ${location}
+
+## CRITERIOS DE FILTRO
+
+Prioriz\xE1 ofertas que cumplan al menos 3 de:
+- Empresa con buena reputaci\xF3n (4+ estrellas)
+- Salario igual o mayor a mi pretensi\xF3n (o "no publicado" si el rol matchea)
+- Modalidad que coincida
+- Ubicaci\xF3n dentro de mi zona o remoto
+- Beneficios mencionados
+
+DESCART\xC1 ofertas que:
+${avoidLines}
+
+## PLAN DE TAREAS
+
+Ejecut\xE1 en orden:
+
+1. **Verificar acceso y sesi\xF3n**: confirm\xE1 que la extensi\xF3n Claude in Chrome
+   est\xE1 activa. Verific\xE1 login en ${portal}.
+
+2. **Buscar ofertas**: ingres\xE1 b\xFAsquedas en paralelo (hasta 4 simult\xE1neas)
+   usando keywords del rol. Ejemplo si soy "Asesor Comercial":
+   "Asesor Comercial", "Ejecutivo de Ventas", "Vendedor B2B", "Account Manager".
+   Abr\xED varias b\xFAsquedas, pero naveg\xE1 los resultados con ritmo humano: no abras muchas ofertas o p\xE1ginas en r\xE1faga.
+
+   Cobertura obligatoria:
+   - Si Roles objetivo o portales figuran como "No definido", no inicies la b\xFAsqueda. Ped\xED al usuario que complete Perfil/Portales en JobPilot y esper\xE1.
+   - Arm\xE1 la estrategia de b\xFAsqueda desde el perfil completo: roles objetivo, stack, seniority, a\xF1os de experiencia, modalidad y ubicaci\xF3n.
+   - A partir de esas palabras clave, gener\xE1 variantes adicionales en espa\xF1ol e ingl\xE9s: sin\xF3nimos, t\xEDtulos equivalentes, combinaciones con tecnolog\xEDas del stack y t\xE9rminos de seniority. No te limites a las keywords literales cargadas.
+   - Us\xE1 el seniority buscado para generar variantes de b\xFAsqueda. Por ejemplo, si el perfil indica SSR o Semi Senior, prob\xE1 variantes como "SSR", "Semi Senior", "Semi-Senior", "Semisenior", "Mid-level" y "Mid".
+   - Separ\xE1 mentalmente keywords base (rol + stack principal del perfil) de keywords exploratorias (t\xEDtulos equivalentes o tecnolog\xEDas cercanas). Las exploratorias sirven para descubrir ofertas, pero no reemplazan los criterios de filtro.
+   - Prioriz\xE1 profundidad sobre velocidad. Antes de concluir una b\xFAsqueda normal, revis\xE1 como m\xEDnimo 80-120 tarjetas/resultados por portal y abr\xED/lee 40-60 avisos que parezcan m\xEDnimamente cercanos al perfil. Si hay menos resultados disponibles, indic\xE1 exactamente d\xF3nde se agotaron.
+   - Para cada keyword principal, revis\xE1 al menos 3 p\xE1ginas completas de resultados. No uses "saturaci\xF3n" para cortar antes de p\xE1gina 3 salvo bloqueo t\xE9cnico real, captcha, login, rate limit o ausencia total de resultados.
+   - Reci\xE9n pod\xE9s declarar saturaci\xF3n cuando hayas revisado al menos 5 queries distintas y 100 tarjetas/resultados totales, y m\xE1s del 70% de los resultados nuevos sean repetidos o claramente fuera de perfil por t\xEDtulo/empresa ya vistos.
+   - No alcanza con abrir 20-30 avisos en total. Si encontr\xE1s pocas compatibles, segu\xED buscando m\xE1s lento y m\xE1s profundo: m\xE1s p\xE1ginas, m\xE1s variantes, otros portales configurados o filtros menos restrictivos del portal que no contradigan el perfil. Nunca relajes criterios, preferencias ni exclusiones cargadas en el perfil.
+   - No rellenes el top con ofertas que no matchean solo para llegar a 10. Si despu\xE9s de ampliar hay menos de 10 compatibles, present\xE1 las que haya y explic\xE1 la cobertura realizada.
+   - Avanz\xE1 lento para evitar rate limit: esper\xE1 entre 8 y 15 segundos entre abrir resultados, cambiar de p\xE1gina, aplicar filtros o entrar a una oferta. Si el portal se pone lento, aument\xE1 la espera. Es preferible tardar m\xE1s y revisar mucho que hacer una b\xFAsqueda superficial.
+   - No abras m\xE1s de 2 ofertas del mismo portal al mismo tiempo. Si hay se\xF1ales de bloqueo, pas\xE1 inmediatamente a navegaci\xF3n secuencial.
+   - Us\xE1 todas las modalidades aceptadas por el perfil. Si el perfil dice Remoto e H\xEDbrido, NO filtres solo remoto.
+   - No uses filtros m\xE1s restrictivos que el perfil (por ejemplo solo remoto, solo mid-senior, solo fecha reciente) salvo que expliques por qu\xE9 y hagas tambi\xE9n una b\xFAsqueda amplia.
+   - En LinkedIn, revis\xE1 tanto b\xFAsquedas por keywords como la feed personalizada /jobs/search-results/ cuando est\xE9 disponible.
+   - Busc\xE1 variantes en ingl\xE9s y espa\xF1ol derivadas de los roles objetivo del perfil. Ejemplo si el rol fuera Frontend: Frontend Developer, React Developer, Angular Developer, TypeScript Developer, Desarrollador Frontend, Frontend SSR. Si el perfil indica otros roles, adapt\xE1 las variantes a esos roles.
+   - Al presentar resultados, indic\xE1 qu\xE9 keywords, filtros y secciones revisaste, cu\xE1ntas tarjetas/resultados escaneaste, cu\xE1ntos avisos abriste/le\xEDste completos, cu\xE1ntas p\xE1ginas recorriste por query y cu\xE1ntos quedaron pendientes por error de carga.
+   - Si el portal aplica rate-limit, bloqueo o captcha, no afirmes que revisaste "todo lo relevante". Inform\xE1 exactamente p\xE1ginas/resultados revisados, qu\xE9 qued\xF3 sin revisar y llam\xE1 a request_human_help con motivo y URL. No intentes resolver captchas por tu cuenta.
+
+3. **Evaluar ofertas**: por cada resultado, abr\xED la oferta, le\xE9 descripci\xF3n,
+   evalu\xE1 seg\xFAn mis criterios. Asign\xE1 score 1-10.
+   - Guard\xE1 en JobPilot solo ofertas compatibles o dudosas que valga la pena que el usuario revise.
+   - No guardes en JobPilot ofertas que violen un descarte duro o que claramente no interesan. Esas ofertas van solo en el resumen como "descartadas", con motivo breve.
+   - Si una oferta no carga o no pod\xE9s leer la descripci\xF3n completa, no la descartes por falta de informaci\xF3n. Reintent\xE1 al menos 2 veces con espera; si sigue fallando, registrala en el resumen como pendiente por error de carga con URL, portal y reintentos.
+   - Si una oferta pide ingl\xE9s Strong, Advanced, Fluent, B2, C1 o C2, tratala como superior a B1 y descartala salvo que el perfil indique expl\xEDcitamente que acepta ese nivel.
+   - Si la empresa tiene rating visible menor a 4 o reviews claramente negativos, descartala en vez de ponerla en el top.
+
+4. **STOP en paso 4 \u2014 presentar top 10** en tabla con columnas:
+   Puesto | Empresa | Lugar | Salario | Modalidad | Score | Raz\xF3n del match
+   Mostrame y esper\xE1 mi confirmaci\xF3n.
+   Antes de la tabla, inclu\xED un resumen de cobertura: portales revisados, queries usadas, p\xE1ginas/resultados revisados, cantidad de ofertas guardadas, descartadas no guardadas y pendientes por bloqueo.
+
+5. **Esperar instrucci\xF3n**:
+   - "confirmar todos" \u2192 postular en orden
+   - "omitir X" \u2192 postular solo las confirmadas
+   - "editar X" \u2192 te indico cambios
+
+## REGLAS DURAS
+
+- NUNCA postular sin confirmaci\xF3n humana en paso 4
+- En modo b\xFAsqueda, no prometas postular ni tomes "confirmar todos" como aprobaci\xF3n de postulaci\xF3n. La confirmaci\xF3n solo sirve para guardar o revisar ofertas; postular ocurre despu\xE9s, en modo postulaci\xF3n y con aprobaci\xF3n en JobPilot.
+- NUNCA cartas gen\xE9ricas, siempre personalizadas
+- Si falla 2 veces, salteala y registrala como error
+- Si pide test t\xE9cnico antes de postular, marcala como "pendiente test"
+- NUNCA reveles info personal a terceros fuera del portal
+- Ante CAPTCHA, verificaci\xF3n humana, rate limit persistente, login o 2FA, llam\xE1 a request_human_help con motivo y URL, paus\xE1 y esper\xE1 al usuario.
+- NO postules a G&L GROUP`;
+}
+function buildApplicationInstructions() {
+  return `## PLAN DE TAREAS
+
+Ejecut\xE1 en orden:
+
+6. **Postular**: por cada oferta confirmada o aprobada en JobPilot:
+   - Adjunt\xE1 mi CV PDF desde cvPath
+   - Carta personalizada: esper\xE1 a que yo te la env\xEDe o te pase el mensaje de por qu\xE9 quiero entrar a esta empresa, por qu\xE9 este rol, y un logro espec\xEDfico relevante
+   - Envi\xE1 postulaci\xF3n
+   - Confirm\xE1 \xE9xito
+
+7. **Report\xE1**: resumen final con total postuladas, confirmadas, errores,
+   y top 3 mejor match para seguimiento LinkedIn manual.
+
+## REGLAS DURAS
+
+- NUNCA postular sin confirmaci\xF3n humana en paso 4 o aprobaci\xF3n expl\xEDcita en JobPilot
+- NUNCA uses cartas gen\xE9ricas, siempre personalizadas por empresa y rol
+- Si falla 2 veces, salteala y registrala como error
+- Si pide test t\xE9cnico antes de postular, marcala como "pendiente test"
+- NUNCA reveles info personal a terceros fuera del portal
+- NO postules a G&L GROUP`;
+}
+function hasTerm(text, term) {
+  const t = term.trim().toLowerCase();
+  if (t.length < 2) return false;
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(text);
+}
+var SENIORITY_PATTERNS = {
+  trainee: [/(^|[^a-z0-9])(trainee|pasante|internship|intern)([^a-z0-9]|$)/i],
+  junior: [/(^|[^a-z0-9])(junior|jr\.?)([^a-z0-9]|$)/i],
+  "semi senior": [/(^|[^a-z0-9])(semi[\s-]?senior|semi[\s-]?sr\.?|semisenior|ssr)([^a-z0-9]|$)/i],
+  ssr: [/(^|[^a-z0-9])(ssr|semi[\s-]?senior|semi[\s-]?sr\.?|semisenior)([^a-z0-9]|$)/i],
+  mid: [/(^|[^a-z0-9])(mid[\s-]?level|mid|intermediate|semi[\s-]?senior|ssr)([^a-z0-9]|$)/i],
+  lead: [/(^|[^a-z0-9])(lead|tech lead|team lead)([^a-z0-9]|$)/i],
+  staff: [/(^|[^a-z0-9])staff([^a-z0-9]|$)/i],
+  principal: [/(^|[^a-z0-9])principal([^a-z0-9]|$)/i]
+};
+var SENIORITY_MAX_YEARS = {
+  trainee: 1,
+  junior: 2,
+  "semi senior": 4,
+  ssr: 4,
+  mid: 4,
+  senior: 99,
+  lead: 99,
+  staff: 99,
+  principal: 99
+};
+function normalizeSeniority(value) {
+  return value.trim().toLowerCase().replace(/\./g, "").replace(/_/g, " ").replace(/\s+/g, " ");
+}
+function getTargetSeniorities(profile) {
+  const values = (profile.targetSeniority?.length ? profile.targetSeniority : DEFAULT_TARGET_SENIORITY).map(normalizeSeniority);
+  return [...new Set(values)];
+}
+function matchesStandaloneSenior(text) {
+  const seniorMatches = [...text.matchAll(/(^|[^a-z0-9])(senior|sr\.?)([^a-z0-9]|$)/gi)];
+  return seniorMatches.some((match) => {
+    const start = match.index ?? 0;
+    const prefix = text.slice(Math.max(0, start - 10), start + match[1].length).toLowerCase();
+    return !/(semi[\s-]?|mid[\s-]?)$/.test(prefix);
+  });
+}
+function matchesSeniority(text, seniority) {
+  if (seniority === "senior") return matchesStandaloneSenior(text);
+  const patterns = SENIORITY_PATTERNS[seniority];
+  return patterns ? patterns.some((pattern) => pattern.test(text)) : hasTerm(text, seniority);
+}
+function requiredYearsRange(text) {
+  if (/(sin experiencia|no se requiere experiencia|without experience|no experience)/i.test(text)) {
+    return { min: 0, max: 0 };
+  }
+  const matches = [...text.matchAll(/(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*\+?\s*(?:años|anos|years|yrs)/gi)];
+  if (matches.length === 0) return null;
+  const ranges = matches.map((match) => ({
+    min: Number(match[1]),
+    max: Number(match[2] ?? match[1])
+  }));
+  return {
+    min: Math.min(...ranges.map((range) => range.min)),
+    max: Math.max(...ranges.map((range) => range.max))
+  };
+}
+function parseMoney(value) {
+  const compact = value.replace(/\s+/g, "");
+  const normalized = compact.includes(",") && !compact.includes(".") ? compact.replace(",", ".") : compact.replace(/[.,]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : void 0;
+}
+function parseSalaryRange(value) {
+  const text = value ?? "";
+  const currencyMatch = text.match(/(USD|ARS|EUR|US\$|U\$S|\$)/i);
+  const rawCurrency = currencyMatch?.[1];
+  const currency = rawCurrency ? rawCurrency === "$" ? "ARS" : rawCurrency.replace(/^US\$|^U\$S$/i, "USD").toUpperCase() : void 0;
+  const numbers = [...text.matchAll(/\d[\d.,]*/g)].map((match) => parseMoney(match[0])).filter((number3) => typeof number3 === "number");
+  return { currency, min: numbers[0], max: numbers[1] ?? numbers[0] };
+}
+function hasHighSenioritySignal(text) {
+  for (const level of ["lead", "staff", "principal", "senior"]) {
+    if (matchesSeniority(text, level)) return level;
+  }
+  return null;
+}
+function isAvoidMatch(text, term) {
+  const normalized = normalizeSeniority(term);
+  if (normalized === "senior") return matchesSeniority(text, "senior");
+  return hasTerm(text, term);
+}
+function scoreSeniority(text, profile) {
+  const targets = getTargetSeniorities(profile);
+  const positives = [];
+  const negatives = [];
+  const matchedTarget = targets.find((level) => matchesSeniority(text, level));
+  if (matchedTarget) positives.push(`seniority: ${matchedTarget}`);
+  const highSignal = hasHighSenioritySignal(text);
+  const seniorityMaxYears = Math.max(...targets.map((level) => SENIORITY_MAX_YEARS[level] ?? 4));
+  const maxAcceptedYears = typeof profile.experienceYearsMax === "number" ? profile.experienceYearsMax : seniorityMaxYears;
+  const years = requiredYearsRange(text);
+  if (highSignal && !targets.includes(highSignal)) negatives.push(`seniority alto: ${highSignal}`);
+  if (years !== null && years.max > maxAcceptedYears) negatives.push(`experiencia requerida: ${years.max}+ a\xF1os`);
+  if (years !== null && typeof profile.experienceYearsMin === "number" && years.max < profile.experienceYearsMin) {
+    negatives.push(`experiencia por debajo del rango: ${years.max} a\xF1os`);
+  }
+  return {
+    score: (matchedTarget ? 10 : 0) - (negatives.length ? 22 : 0),
+    positives,
+    negatives
+  };
+}
+function scoreOffer(offer, profile) {
+  if (!profile) return { score: 50, positives: [], negatives: [] };
+  const text = `${offer.title ?? ""} ${offer.description ?? ""} ${(offer.requirements ?? []).join(" ")}`.toLowerCase();
+  let score = 42;
+  const positives = [];
+  const negatives = [];
+  let mainPts = 0;
+  for (const tech of profile.mainStack ?? []) if (hasTerm(text, tech)) {
+    mainPts += 8;
+    positives.push(tech);
+  }
+  score += Math.min(mainPts, 30);
+  if ((profile.preferredModality ?? []).some((m) => hasTerm(text, m))) {
+    score += 6;
+    positives.push("modalidad");
+  }
+  if ((profile.preferredLocation ?? []).some((l) => hasTerm(text, l))) {
+    score += 6;
+    positives.push("ubicaci\xF3n");
+  }
+  const seniority = scoreSeniority(text, profile);
+  score += seniority.score;
+  positives.push(...seniority.positives);
+  negatives.push(...seniority.negatives);
+  const offeredSalary = parseSalaryRange(offer.salary);
+  const sameCurrency = !offeredSalary.currency || !profile.salaryCurrency || offeredSalary.currency === profile.salaryCurrency.toUpperCase();
+  if (typeof profile.salaryMin === "number" && typeof offeredSalary.max === "number" && sameCurrency) {
+    if (offeredSalary.max < profile.salaryMin) {
+      score -= 18;
+      negatives.push("salario debajo de pretensi\xF3n");
+    } else {
+      score += 6;
+      positives.push("salario compatible");
+    }
+  }
+  for (const bad of profile.avoid ?? []) if (isAvoidMatch(text, bad)) {
+    score -= 18;
+    negatives.push(bad);
+  }
+  return { score: Math.max(0, Math.min(100, score)), positives, negatives };
+}
+function buildOffer(raw, profile) {
+  const { score, positives, negatives } = scoreOffer(raw, profile);
+  const status = score >= 65 ? "recomendada" : "detectada";
+  return {
+    id: `cowork-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    title: raw.title ?? "Sin t\xEDtulo",
+    company: raw.company ?? "Empresa desconocida",
+    portal: raw.portal ?? "Cowork",
+    link: raw.link ?? "",
+    description: raw.description ?? "",
+    requirements: raw.requirements ?? [],
+    modality: raw.modality,
+    location: raw.location,
+    salary: raw.salary,
+    status,
+    score,
+    scoreBreakdown: { positives, negatives },
+    detectedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function normLink(s) {
+  try {
+    const u = new URL(String(s));
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const path = u.pathname.toLowerCase().replace(/\/$/, "");
+    const indeedId = u.searchParams.get("jk");
+    if (host.includes("indeed.") && indeedId) return `${host}/viewjob?jk=${indeedId.toLowerCase()}`;
+    const linkedInId = u.searchParams.get("currentJobId") ?? u.searchParams.get("jobId");
+    if (host.includes("linkedin.") && linkedInId) return `${host}/jobs/view/${linkedInId.toLowerCase()}`;
+    const linkedInPathId = path.match(/\/jobs\/view\/(\d+)/)?.[1];
+    if (host.includes("linkedin.") && linkedInPathId) return `${host}/jobs/view/${linkedInPathId}`;
+    return `${host}${path}`;
+  } catch {
+    return String(s).toLowerCase().split("?")[0].replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+  }
+}
+function findDup(offers, raw) {
+  const link = (raw.link ?? "").trim();
+  if (link) {
+    const n = normLink(link);
+    const hit = offers.find((o) => o.link && normLink(String(o.link)) === n);
+    if (hit) return hit;
+  }
+  const key = `${(raw.title ?? "").trim().toLowerCase()}|${(raw.company ?? "").trim().toLowerCase()}`;
+  if (key === "|") return void 0;
+  return offers.find((o) => `${String(o.title ?? "").toLowerCase()}|${String(o.company ?? "").toLowerCase()}` === key);
+}
+function rawOfferShouldNotBeSaved(raw) {
+  if (raw.save === false || raw.compatible === false) return true;
+  const decision = `${raw.status ?? ""} ${raw.decision ?? ""}`.toLowerCase();
+  return /\b(rechazad[ao]s?|descartad[ao]s?|discarded|rejected|hard reject)\b/.test(decision);
+}
 var TOOLS = [
   {
     name: "get_profile",
@@ -15522,9 +15893,95 @@ var TOOLS = [
     }
   },
   {
+    name: "request_human_help",
+    description: "Ped\xED intervenci\xF3n humana cuando un bloqueo te impide continuar: CAPTCHA, verificaci\xF3n de robot, login con 2FA, muro de inicio de sesi\xF3n, o cualquier paso que requiera un humano. NUNCA intentes resolver un CAPTCHA o verificaci\xF3n vos mismo. Llam\xE1 esto, paus\xE1, y esper\xE1 a que el usuario resuelva y te avise.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Qu\xE9 bloqueo encontraste" },
+        portal: { type: "string", description: "Portal donde ocurri\xF3 (opcional)" },
+        url: { type: "string", description: "URL de la p\xE1gina bloqueada (opcional)" }
+      },
+      required: ["reason"]
+    }
+  },
+  {
+    name: "request_cover_letter",
+    description: "Us\xE1 esto cuando una postulaci\xF3n requiera carta de presentaci\xF3n / cover letter. NO escribas la carta vos. Registr\xE1 el pedido para que el usuario la escriba, dej\xE1 la oferta pendiente y segu\xED con las dem\xE1s.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        company: { type: "string", description: "Nombre de la empresa" },
+        role: { type: "string", description: "T\xEDtulo del puesto" },
+        offerId: { type: "string", description: "ID de la oferta (si la ten\xE9s)" },
+        link: { type: "string", description: "URL de la oferta (opcional)" }
+      },
+      required: ["company", "role"]
+    }
+  },
+  {
     name: "get_tracker_summary",
     description: "Devuelve un resumen del tracker con m\xE9tricas de la b\xFAsqueda laboral.",
     inputSchema: { type: "object", properties: {}, required: [] }
+  },
+  {
+    name: "add_offer",
+    description: "Agrega una oferta laboral a JobPilot solo si es compatible o dudosa y vale la pena que el usuario la revise. No uses esta herramienta para ofertas descartadas por criterios duros; reportalas solo en el resumen.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "T\xEDtulo del puesto" },
+        company: { type: "string", description: "Nombre de la empresa" },
+        portal: { type: "string", description: "Portal donde se encontr\xF3 (LinkedIn, Bumeran, GetOnBoard, etc.)" },
+        link: { type: "string", description: "URL directa a la oferta" },
+        description: { type: "string", description: "Descripci\xF3n completa del puesto y requisitos" },
+        requirements: { type: "array", items: { type: "string" }, description: "Lista de tecnolog\xEDas o requisitos clave (opcional)" },
+        modality: { type: "string", description: "Modalidad: remoto, h\xEDbrido, presencial (opcional)" },
+        location: { type: "string", description: "Ubicaci\xF3n (opcional)" },
+        salary: { type: "string", description: "Rango salarial si est\xE1 disponible (opcional)" }
+      },
+      required: ["title", "company", "link", "description"]
+    }
+  },
+  {
+    name: "get_instructions",
+    description: "Obtiene las instrucciones completas para la tarea actual: criterios de filtro, portales, plan de pasos y reglas. Llam\xE1 esto antes de empezar cualquier b\xFAsqueda o postulaci\xF3n.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["busqueda", "postulacion"], description: '"busqueda" para buscar y guardar ofertas. "postulacion" para postular a las aprobadas.' }
+      },
+      required: ["mode"]
+    }
+  },
+  {
+    name: "add_offers",
+    description: "Agrega m\xFAltiples ofertas laborales compatibles o dudosas de una vez. No incluyas ofertas descartadas por criterios duros; esas se informan solo en el resumen de cobertura.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        offers: {
+          type: "array",
+          description: "Lista de ofertas encontradas",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              company: { type: "string" },
+              portal: { type: "string" },
+              link: { type: "string" },
+              description: { type: "string" },
+              requirements: { type: "array", items: { type: "string" } },
+              modality: { type: "string" },
+              location: { type: "string" },
+              salary: { type: "string" }
+            },
+            required: ["title", "company", "link", "description"]
+          }
+        }
+      },
+      required: ["offers"]
+    }
   }
 ];
 var server = new Server(
@@ -15590,6 +16047,57 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         writeJson((0, import_path.join)(DATA_DIR, "offers.json"), offers);
         return { content: [{ type: "text", text: `Oferta "${offers[idx].title}" marcada como ${a.status}.` }] };
       }
+      case "request_human_help": {
+        const a = args;
+        const file = (0, import_path.join)(DATA_DIR, "help_requests.json");
+        const list = readJson(file, []);
+        list.push({
+          id: `help-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          reason: a.reason,
+          portal: a.portal,
+          url: a.url,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          resolved: false
+        });
+        writeJson(file, list);
+        return {
+          content: [{
+            type: "text",
+            text: `Pedido de ayuda registrado en JobPilot: "${a.reason}". PAUS\xC1 ac\xE1. El usuario tiene que resolver el bloqueo manualmente. Esper\xE1 a que te avise que ya est\xE1 resuelto para continuar.`
+          }]
+        };
+      }
+      case "request_cover_letter": {
+        const a = args;
+        const file = (0, import_path.join)(DATA_DIR, "help_requests.json");
+        const list = readJson(file, []);
+        list.push({
+          id: `cover-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          type: "cover_letter",
+          reason: `Carta de presentaci\xF3n: ${a.role} en ${a.company}`,
+          company: a.company,
+          role: a.role,
+          offerId: a.offerId,
+          url: a.link,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          resolved: false
+        });
+        writeJson(file, list);
+        if (a.offerId) {
+          const offers = readJson((0, import_path.join)(DATA_DIR, "offers.json"), []);
+          const idx = offers.findIndex((o) => o.id === a.offerId);
+          if (idx !== -1) {
+            offers[idx] = { ...offers[idx], status: "pendiente_manual", notes: "Esperando carta de presentaci\xF3n del usuario" };
+            writeJson((0, import_path.join)(DATA_DIR, "offers.json"), offers);
+          }
+        }
+        return {
+          content: [{
+            type: "text",
+            text: `Esta oferta (${a.role} en ${a.company}) requiere carta de presentaci\xF3n. NO la escribas. La dej\xE9 pendiente para que la escriba el usuario. Segu\xED con las otras ofertas.`
+          }]
+        };
+      }
       case "get_tracker_summary": {
         const offers = readJson((0, import_path.join)(DATA_DIR, "offers.json"), []);
         const counts = {};
@@ -15605,6 +16113,71 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           errores: offers.filter((o) => o.status === "error").length
         };
         return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
+      }
+      case "get_instructions": {
+        const { mode } = args;
+        const profile = readJson((0, import_path.join)(DATA_DIR, "profile.json"), null);
+        let text;
+        if (mode === "busqueda") {
+          const settings = readJson((0, import_path.join)(DATA_DIR, "settings.json"), null);
+          text = applyInstructionVariables(buildSearchInstructions(profile, settings), profile, settings);
+        } else {
+          text = applyInstructionVariables(buildApplicationInstructions(), profile, null);
+        }
+        return { content: [{ type: "text", text }] };
+      }
+      case "add_offer": {
+        const a = args;
+        if (rawOfferShouldNotBeSaved(a)) {
+          return { content: [{ type: "text", text: `Oferta "${a.title ?? "sin t\xEDtulo"}" no guardada: fue marcada como descartada/no compatible. Informala solo en el resumen.` }] };
+        }
+        const profile = readJson((0, import_path.join)(DATA_DIR, "profile.json"), null);
+        const offers = readJson((0, import_path.join)(DATA_DIR, "offers.json"), []);
+        const dup = findDup(offers, a);
+        if (dup) {
+          return { content: [{ type: "text", text: `Ya existe en JobPilot: "${dup.title}" (estado: ${dup.status}). NO la agregu\xE9 ni la abras${dup.status === "postulada" ? ", ya postulada" : ""}. Saltala.` }] };
+        }
+        const newOffer = buildOffer(a, profile);
+        offers.push(newOffer);
+        writeJson((0, import_path.join)(DATA_DIR, "offers.json"), offers);
+        return { content: [{ type: "text", text: `Oferta "${newOffer.title}" guardada en JobPilot (score: ${newOffer.score}, estado: ${newOffer.status}).` }] };
+      }
+      case "add_offers": {
+        const { offers: rawOffers } = args;
+        if (!Array.isArray(rawOffers) || rawOffers.length === 0)
+          return { content: [{ type: "text", text: "No se enviaron ofertas." }] };
+        const profile = readJson((0, import_path.join)(DATA_DIR, "profile.json"), null);
+        const offers = readJson((0, import_path.join)(DATA_DIR, "offers.json"), []);
+        const skipped = [];
+        const notSaved = [];
+        const built = [];
+        for (const r of rawOffers) {
+          if (rawOfferShouldNotBeSaved(r)) {
+            notSaved.push(r.title ?? "Sin t\xEDtulo");
+            continue;
+          }
+          const dup = findDup([...offers, ...built], r);
+          if (dup) {
+            skipped.push(`${dup.title} (${dup.status})`);
+            continue;
+          }
+          built.push(buildOffer(r, profile));
+        }
+        offers.push(...built);
+        writeJson((0, import_path.join)(DATA_DIR, "offers.json"), offers);
+        const recomendadas = built.filter((o) => o.status === "recomendada").length;
+        return {
+          content: [{
+            type: "text",
+            text: `${built.length} oferta(s) nuevas guardadas (${recomendadas} recomendadas). ${skipped.length} ya exist\xEDan y se saltaron.
+
+` + built.map((o) => `\u2022 ${o.title} @ ${o.company} \u2014 score ${o.score} (${o.status})`).join("\n") + (skipped.length ? `
+
+Ya existentes: ${skipped.join(", ")}` : "") + (notSaved.length ? `
+
+Descartadas no guardadas: ${notSaved.join(", ")}` : "")
+          }]
+        };
       }
       default:
         return { content: [{ type: "text", text: `Herramienta desconocida: ${name}` }] };

@@ -20,6 +20,7 @@ export type View =
 
 export interface UserProfile {
   targetRole: string
+  targetRoles: string[]
   personalInfo: {
     dni: string
     email: string
@@ -28,8 +29,14 @@ export interface UserProfile {
   }
   mainStack: string[]
   secondaryStack: string[]
+  targetSeniority: string[]
+  experienceYearsMin?: number
+  experienceYearsMax?: number
   experience: string
   softSkills: string[]
+  salaryCurrency: string
+  salaryMin?: number
+  salaryMax?: number
   salaryExpectation: string
   availability: string[]
   preferredModality: string[]
